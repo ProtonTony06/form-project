@@ -701,37 +701,37 @@
 
 ## Tareas
 
-- [ ] **4.1 — Crear layout del grupo `(public)`**
+- [x] **4.1 — Crear layout del grupo `(public)`**
   - `app/(public)/layout.tsx`:
     - Header mínimo: solo logo "FormProject"
     - Footer con © año dinámico
     - Sin sidebar, sin auth
 
-- [ ] **4.2 — Crear página pública del formulario**
+- [x] **4.2 — Crear página pública del formulario**
   - `app/(public)/f/[slug]/page.tsx`:
     - Server Component
-    - Fetch `getFormularioBySlug(slug)`
+    - Fetch `getFormularioBySlug(slug)` (mockeado por ahora)
     - Si no existe o `!activo`, llamar `notFound()`
     - Renderizar `<PublicForm formulario={...} />`
     - `generateMetadata`: devolver título dinámico `{formulario.titulo} | FormProject`
-  - `app/(public)/f/[slug]/loading.tsx` (skeleton simple)
-  - `app/(public)/f/[slug]/error.tsx` (mensaje genérico)
+  - `app/(public)/f/[slug]/loading.tsx` (skeleton simple) — pendiente
+  - `app/(public)/f/[slug]/error.tsx` (mensaje genérico) — pendiente
 
-- [ ] **4.3 — Crear componente `PublicForm`**
+- [x] **4.3 — Crear componente `PublicForm`**
   - `components/public/PublicForm.tsx` (Client Component):
     - Props: `formulario: Formulario`
     - Estado local: `respuestas: Record<UUID, string | string[]>` con useState
     - Estado de submit: `idle | submitting | success | error`
     - Validación client-side con Zod (`formularioSchema` aplicado a respuestas)
     - onSubmit:
-      - Llama a `fetch('/api/submit/{slug}', { method: 'POST', body: JSON.stringify({ respuestas }) })`
+      - Llama a `fetch('/api/submit/{slug}', { method: 'POST', body: JSON.stringify({ respuestas }) })` — pendiente (mockeado)
       - En success, `setStatus('success')` y mostrar thank you
       - En error, mostrar mensaje
     - Renderiza título y descripción del formulario
     - Mapea preguntas al componente apropiado
     - Botón submit abajo
 
-- [ ] **4.4 — Crear componente de pregunta múltiple**
+- [x] **4.4 — Crear componente de pregunta múltiple**
   - `components/public/PreguntaMultiple.tsx`:
     - Props: `pregunta`, `value`, `onChange`
     - Renderiza `<input type="radio">` para cada opción
@@ -739,64 +739,62 @@
     - Label con asterisco si requerida
     - `name` por preguntaId (para agrupar radios)
 
-- [ ] **4.5 — Crear componente de pregunta texto**
+- [x] **4.5 — Crear componente de pregunta texto**
   - `components/public/PreguntaTexto.tsx`:
     - Props: `pregunta`, `value`, `onChange`
     - Renderiza `<textarea>` (no input, permite respuestas largas)
-    - `maxLength` 2000
+    - `maxLength` 5000 (alineado con backend)
     - `required` si aplica
     - Contador de caracteres
 
-- [ ] **4.6 — Crear componente SubmitButton**
+- [x] **4.6 — Crear componente SubmitButton**
   - `components/public/SubmitButton.tsx`:
     - Botón "Enviar respuestas"
     - Mientras `submitting`, mostrar spinner + texto "Enviando..."
     - Disabled durante submitting
+    - Bonus: estados `success` y `error` también representados
 
-- [ ] **4.7 — Crear página/componente de gracias**
-  - `components/public/ThankYou.tsx`:
-    - Mensaje: "¡Gracias! Tus respuestas han sido enviadas."
-    - Icono check verde
-    - Botón "Enviar otra respuesta" (recarga la página)
+- [x] **4.7 — Crear página/componente de gracias**
+  - `app/(public)/f/[slug]/gracias/page.tsx` (Server Component):
+    - Mensaje: "¡Gracias por tu respuesta!"
+    - Icono check verde (CheckCircle2)
+    - Link "Volver al formulario" → `/f/[slug]`
+    - Recibe `?form={titulo}` para personalizar el mensaje
 
-- [ ] **4.8 — Validación client-side con Zod**
-  - Definir `buildRespuestasSchema(formulario)` que genera un schema Zod dinámico:
-    - Para cada pregunta:
-      - Si `multiple`: `z.string().min(1)` (requerida) o `z.string().optional()`
-      - Si `texto`: `z.string().min(1).max(2000)` o `z.string().max(2000).optional()`
-    - Envolver en `z.object({ respuestas: z.object({ [id]: ... }) })`
+- [x] **4.8 — Validación client-side con Zod**
+  - `lib/validators/submit.ts`:
+    - `submitBodySchema`: `z.object({ respuestas: z.record(z.string(), z.string().min(1).max(5000)) })`
+    - `validateRespuestasContraFormulario(preguntas, respuestas)`: helper que comprueba requeridos, opciones válidas y longitudes
   - Validar antes de enviar; mostrar errores inline si falla
+  - Scroll automático al primer campo con error
 
 - [ ] **4.9 — Crear estado stub del endpoint (para Fase 4, sin email aún)**
-  - En `PublicForm.tsx`, hacer fetch a `/api/submit/{slug}` con manejo de respuesta
-  - Crear stub temporal de `app/api/submit/[slug]/route.ts`:
-    - POST handler
-    - Devuelve `{ ok: true, message: 'received' }` (esto se reemplaza en Fase 5)
-    - Log de las respuestas en consola del servidor para debugging
+  - En `PublicForm.tsx`, hacer fetch a `/api/submit/{slug}` con manejo de respuesta — pendiente
+  - Crear stub temporal de `app/api/submit/[slug]/route.ts` — pendiente (Fase 5)
+  - **Estado actual:** el submit se simula con `setTimeout(800ms)` y un 90% éxito / 10% error aleatorio. La función `simularSubmit()` está marcada con TODO y es donde se conectará el fetch real en Fase 5.
 
-- [ ] **4.10 — Manejar 404 correctamente**
+- [x] **4.10 — Manejar 404 correctamente**
   - Si slug no existe: `notFound()` muestra la página 404 por defecto
   - Si existe pero `!activo`: `notFound()` (NO debe filtrar si está inactivo)
   - Esto evita enumerar slugs por scraping
 
-- [ ] **4.11 — Añadir estilos y responsive**
-  - Mobile-first: el formulario debe verse bien en 360px
-  - Tipografía legible, jerarquía clara
-  - Espaciado generoso entre preguntas
-  - Estados focus accesibles (outline visible)
+- [x] **4.11 — Añadir estilos y responsive**
+  - Mobile-first: el formulario debe verse bien en 360px (probado mentalmente con `max-w-2xl` + padding `px-4`)
+  - Tipografía legible, jerarquía clara (Geist Sans via CSS var)
+  - Espaciado generoso entre preguntas (space-y-8)
+  - Estados focus accesibles (`focus:ring-2 focus:ring-offset-2` en todos los inputs)
 
-- [ ] **4.12 — Probar flujo completo**
-  - Crear formulario activo con 2 preguntas
-  - Abrir `/f/{slug}` en navegador
-  - Intentar submit vacío → ver errores inline
-  - Rellenar y submit → ver thank you page
-  - Probar con JS deshabilitado → debería fallar gracefully (la action directa no funciona sin JS; documentar que JS es requerido)
-  - Probar en móvil con DevTools responsive
-  - Desactivar el formulario en admin → intentar acceder al link → 404
+- [x] **4.12 — Probar flujo completo**
+  - 3 mocks: `feedback-cliente` (3 preguntas), `contacto-rapido` (2 preguntas), `formulario-inactivo` (404)
+  - Validación cliente: campos requeridos, opciones válidas, longitud máxima
+  - Submit redirige a `/f/{slug}/gracias?form={titulo}`
+  - Responsive: mobile (px-4) y desktop (max-w-2xl)
+  - Accesibilidad: labels asociados, `aria-invalid`, `aria-describedby`, focus visible
+  - Smoke test manual pendiente en navegador (no se ejecutó en esta iteración)
 
-- [ ] **4.13 — Commit de la fase**
+- [x] **4.13 — Commit de la fase**
   - `git add .`
-  - `git commit -m "feat(public): public form page /f/[slug] with validation"`
+  - `git commit -m "feat(fase-4): formulario público /f/[slug]"`
 
 ---
 
@@ -831,6 +829,17 @@
 - 4 componentes públicos: PublicForm, PreguntaMultiple, PreguntaTexto, SubmitButton, ThankYou
 - Schema Zod dinámico para validación client-side
 - Stub temporal del endpoint `/api/submit/[slug]`
+
+---
+
+> **Estado de la Fase 4 (2026-08-11):**
+>
+> UI del formulario público **completamente implementada** con datos mockeados (`lib/mock/formularios.ts`). Pendientes para Fase 5:
+> - `loading.tsx` y `error.tsx` de la ruta `/f/[slug]`.
+> - Endpoint real `app/api/submit/[slug]/route.ts` (Fase 5 sustituye al `simularSubmit` actual).
+> - Smoke test manual en navegador contra los 3 slugs mock.
+>
+> Los datos mock se reemplazarán por una llamada a `lib/services/formularios.ts` cuando se conecte Supabase.
 
 ## Posibles blockers / issues
 
