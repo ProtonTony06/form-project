@@ -356,7 +356,7 @@
 
 ## Tareas
 
-- [ ] **2.1 — Instalar y configurar NextAuth v5 (Auth.js)**
+- [x] **2.1 — Instalar y configurar NextAuth v5 (Auth.js)**
   - Crear `auth.config.ts` (configuración base, edge-compatible)
   - Crear `auth.ts` (configuración completa con adapter si aplica)
   - Definir `CredentialsProvider` custom:
@@ -370,14 +370,14 @@
   - Sesión con estrategia `jwt` (no DB session)
   - Callbacks `jwt` y `session` para inyectar info mínima
 
-- [ ] **2.2 — Crear middleware de protección**
+- [x] **2.2 — Crear middleware de protección**
   - `middleware.ts` (raíz del proyecto):
     - Exportar `auth` de NextAuth
     - Matcher: `['/admin/:path*']`
     - Si usuario no autenticado intenta acceder a `/admin/*`, redirigir a `/admin/login`
     - Excluir `/admin/login` de la protección
 
-- [ ] **2.3 — Crear componentes UI base reutilizables**
+- [x] **2.3 — Crear componentes UI base reutilizables**
   - `components/ui/Button.tsx`:
     - Variantes: `primary`, `secondary`, `ghost`, `danger`
     - Tamaños: `sm`, `md`, `lg`
@@ -392,7 +392,7 @@
   - Exportar todo desde `components/ui/index.ts`
   - Usar `lib/utils.ts` con función `cn(...inputs)` (combina `clsx` + `tailwind-merge`)
 
-- [ ] **2.4 — Crear layout del grupo `(admin)`**
+- [x] **2.4 — Crear layout del grupo `(admin)`**
   - `app/(admin)/layout.tsx`:
     - Verificar sesión con `auth()` server-side
     - Si no hay sesión, redirigir a `/admin/login`
@@ -401,7 +401,7 @@
     - Main content area con container responsivo
   - Estilos: limpio, fondo gris claro, header blanco con sombra
 
-- [ ] **2.5 — Crear página de login**
+- [x] **2.5 — Crear página de login**
   - `app/(admin)/admin/login/page.tsx`:
     - Server Component
     - Si ya está autenticado, redirigir a `/admin`
@@ -414,12 +414,12 @@
     - Manejo de estado: `pending` para deshabilitar botón
     - Mostrar errores inline con el componente Input
 
-- [ ] **2.6 — Crear Server Action de logout**
+- [x] **2.6 — Crear Server Action de logout**
   - `app/(admin)/admin/actions.ts`:
     - `async function logoutAction()` → llama `signOut({ redirectTo: '/admin/login' })`
   - Botón en el header llama a esta action con `<form action={logoutAction}>`
 
-- [ ] **2.7 — Crear página de dashboard (vacía, solo placeholder)**
+- [x] **2.7 — Crear página de dashboard (vacía, solo placeholder)**
   - `app/(admin)/admin/page.tsx`:
     - Título "Mis formularios"
     - Botón "Crear formulario" (link a `/admin/formularios/nuevo`)
@@ -427,16 +427,16 @@
     - Lista vacía por ahora (la implementación real en Fase 3)
   - Por ahora, no hace query a BD — solo muestra el shell
 
-- [ ] **2.8 — Añadir página raíz que redirija**
+- [x] **2.8 — Añadir página raíz que redirija**
   - `app/page.tsx`:
     - Si autenticado, redirigir a `/admin`
     - Si no, redirigir a `/admin/login`
 
-- [ ] **2.9 — Añadir loading y error states**
+- [x] **2.9 — Añadir loading y error states**
   - `app/(admin)/admin/loading.tsx` (skeleton simple)
   - `app/(admin)/admin/error.tsx` (mensaje genérico + botón recargar)
 
-- [ ] **2.10 — Probar flujo completo en local**
+- [x] **2.10 — Probar flujo completo en local**
   - Arrancar `npm run dev`
   - Intentar acceder a `/admin` → debe redirigir a `/admin/login`
   - Login con credenciales incorrectas → debe mostrar error
@@ -444,9 +444,22 @@
   - Click en logout → debe volver a `/admin/login`
   - Verificar que el middleware no rompe rutas públicas
 
-- [ ] **2.11 — Commit de la fase**
+- [x] **2.11 — Commit de la fase**
   - `git add .`
   - `git commit -m "feat(admin): nextauth + login + protected dashboard shell"`
+
+> **Nota de implementación (2026-08-11):** La autenticación se realiza contra
+> `HARDCODE_ADMIN_EMAIL` / `HARDCODE_ADMIN_PASSWORD` (texto plano en `.env.local`)
+> hasta que se cree la tabla `admin_user` en Supabase. La migración está
+> documentada como bloque de comentarios en `lib/auth.ts`. El dashboard lista
+> dos formularios mockeados con la misma forma que `Formulario` para que el
+> cambio futuro sea solo sustituir el array por una query. El middleware se
+> limita a inyectar `x-pathname`; la lógica de redirección por sesión vive en
+> el layout `(admin)/admin/layout.tsx`. El botón de logout usa una server
+> action inline declarada en `LayoutShell.tsx` (no se creó `actions.ts`
+> separado para evitar un archivo de una sola función). Se añadió
+> `class-variance-authority` para los componentes UI (`Button` con
+> `primary | secondary | outline | ghost | destructive`).
 
 ---
 
