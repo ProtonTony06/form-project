@@ -45,18 +45,12 @@ export default function GraciasPage({ params, searchParams }: PageProps) {
           formulario la recibirá en su correo.
         </p>
 
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+        <div className="mt-8 flex flex-col items-center gap-3">
           <Link
             href={`/f/${params.slug}`}
             className="inline-flex items-center justify-center rounded-lg border border-transparent bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
           >
             Volver al formulario
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2"
-          >
-            Ir al inicio
           </Link>
         </div>
       </div>

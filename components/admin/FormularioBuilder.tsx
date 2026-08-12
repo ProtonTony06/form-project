@@ -28,6 +28,7 @@ import {
   type ActionResult,
 } from "@/app/(admin)/admin/actions";
 import { PreguntaEditor } from "./PreguntaEditor";
+import { ImportarPreguntasJSON } from "./ImportarPreguntasJSON";
 import type {
   FormularioBuilderInitialData,
   SubmitState,
@@ -195,6 +196,30 @@ export default function FormularioBuilder({
         requerido: true,
       },
     ]);
+  }
+
+  /**
+   * Añade al array del builder las preguntas que llegaron validadas
+   * desde el importador JSON. Las concatena al final (después de las
+   * automáticas y de cualquier otra que ya estuviera).
+   *
+   * El componente `ImportarPreguntasJSON` ya se encarga de capar el
+   * máximo, así que aquí solo validamos como defensa.
+   */
+  function importarPreguntas(
+    incoming: Array<{
+      tipo: "opcion_multiple" | "texto_libre";
+      contenido: string;
+      opciones: string[] | null;
+      requerido: boolean;
+    }>,
+  ) {
+    if (incoming.length === 0) return;
+    setPreguntas((prev) => {
+      const espacio = MAX_PREGUNTAS - prev.length;
+      const aAnadir = incoming.slice(0, Math.max(0, espacio));
+      return [...prev, ...aAnadir];
+    });
   }
 
   function updatePregunta(i: number, p: PreguntaDraft) {
@@ -491,6 +516,13 @@ export default function FormularioBuilder({
               Las preguntas con candado son automáticas del sistema.
             </span>
           </div>
+
+          <ImportarPreguntasJSON
+            existingCount={preguntas.length}
+            maxPreguntas={MAX_PREGUNTAS}
+            onImport={importarPreguntas}
+            disabled={isSubmitting}
+          />
         </CardContent>
       </Card>
 

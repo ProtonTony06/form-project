@@ -84,6 +84,58 @@ export const formularioUpdateSchema = formularioCreateSchema.extend({
   id: z.string().uuid(),
 });
 
+/**
+ * Schema para el importador de preguntas por JSON.
+ *
+ * El JSON de import contiene ÚNICAMENTE las preguntas que el usuario
+ * quiere añadir (las 2 preguntas automáticas Nombre/Email NO se
+ * incluyen porque el servicio las añade siempre por su cuenta).
+ *
+ * Cada pregunta del array se valida con `preguntaImportItemSchema`,
+ * que es idéntico a `preguntaSchema` pero SIN los campos `id` (no
+ * aplica al crear), `orden` (lo asigna el builder al concatenar) y
+ * `esAutomatica` (no tiene sentido importar preguntas automáticas;
+ * ya existen siempre).
+ */
+const preguntaImportItemSchema = z.discriminatedUnion("tipo", [
+  z.object({
+    tipo: z.literal("opcion_multiple"),
+    contenido: z
+      .string()
+      .min(1, "La pregunta no puede estar vacía.")
+      .max(500, "Máximo 500 caracteres."),
+    opciones: z
+      .array(
+        z
+          .string()
+          .min(1, "Las opciones no pueden estar vacías.")
+          .max(200, "Máximo 200 caracteres por opción."),
+      )
+      .min(2, "Añade al menos 2 opciones.")
+      .max(20, "Máximo 20 opciones."),
+    requerido: z.boolean(),
+  }),
+  z.object({
+    tipo: z.literal("texto_libre"),
+    contenido: z
+      .string()
+      .min(1, "La pregunta no puede estar vacía.")
+      .max(500, "Máximo 500 caracteres."),
+    opciones: z.null(),
+    requerido: z.boolean(),
+  }),
+]);
+
+export const preguntasImportSchema = z.object({
+  preguntas: z
+    .array(preguntaImportItemSchema)
+    .min(1, "El JSON debe contener al menos una pregunta.")
+    .max(50, "El JSON contiene demasiadas preguntas (máximo 50)."),
+});
+
+export type PreguntasImport = z.infer<typeof preguntasImportSchema>;
+export type PreguntaImportItem = z.infer<typeof preguntaImportItemSchema>;
+
 export type PreguntaInput = z.infer<typeof preguntaSchema>;
 export type FormularioCreateInput = z.infer<typeof formularioCreateSchema>;
 export type FormularioUpdateInput = z.infer<typeof formularioUpdateSchema>;
