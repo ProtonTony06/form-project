@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toggleActivoAction } from "@/app/(admin)/admin/actions";
 
@@ -95,6 +95,13 @@ export function ToggleActivoButton({
           />
         </button>
         <span className="text-xs font-medium text-slate-700">{label}</span>
+        {pending && (
+          <Loader2
+            className="h-3.5 w-3.5 animate-spin text-slate-500"
+            aria-hidden="true"
+            data-testid="toggle-activo-loading"
+          />
+        )}
       </div>
       {error && (
         <p
