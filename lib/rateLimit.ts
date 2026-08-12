@@ -42,6 +42,14 @@ export function rateLimit(
 }
 
 /**
+ * Elimina el bucket asociado a una clave. Útil cuando un evento
+ * (login exitoso, etc.) debe limpiar el historial de un cliente.
+ */
+export function resetRateLimit(key: string): void {
+  buckets.delete(key);
+}
+
+/**
  * Limpieza periódica de buckets expirados.
  * - Sólo se registra si `setInterval` está disponible (lo está en Node,
  *   pero NO en Edge runtime — ahí simplemente no se ejecuta la limpieza).

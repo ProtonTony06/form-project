@@ -16,11 +16,31 @@ export interface AdminUserSeguro {
 }
 
 /**
+ * Hash dummy con bcrypt cost 12, precomputado al cargar el módulo.
+ *
+ * Se usa para igualar el timing de `verificarCredencialesAdmin` cuando el
+ * email no existe: en ese caso comparamos contra este hash (mismo cost,
+ * misma duración de bcrypt.compare) en vez de devolver null inmediatamente.
+ * Eso evita que un atacante pueda enumerar qué emails son admin midiendo
+ * los tiempos de respuesta del login.
+ *
+ * El material es aleatorio y nadie lo conoce, así que ningún password real
+ * puede matchear este hash.
+ */
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync(
+  "timing-attack-mitigation-dummy-not-a-real-password",
+  12,
+);
+
+/**
  * Verifica credenciales contra la tabla `admin_user`.
  * Devuelve el usuario seguro si coincide, o `null` si falla cualquier cosa.
  *
  * Importante: nunca revelar el motivo exacto del fallo (mismo mensaje
  * para "no existe" y "password incorrecto") para evitar user enumeration.
+ *
+ * Además, siempre ejecuta un bcrypt.compare (también contra el hash dummy
+ * cuando el usuario no existe) para igualar el tiempo de respuesta.
  */
 export async function verificarCredencialesAdmin(
   email: string,
@@ -35,10 +55,14 @@ export async function verificarCredencialesAdmin(
     .eq("email", email.trim().toLowerCase())
     .maybeSingle();
 
-  if (error || !user) return null;
+  // Siempre ejecutamos bcrypt.compare, contra el hash real si existe
+  // usuario, o contra el hash dummy si no. Así el tiempo de respuesta
+  // es indistinguible entre "email no existe" y "email existe pero
+  // password incorrecta".
+  const hashToCompare = user?.password_hash ?? DUMMY_BCRYPT_HASH;
+  const valid = await bcrypt.compare(password, hashToCompare);
 
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) return null;
+  if (error || !user || !valid) return null;
 
   return { id: user.id, email: user.email };
 }
