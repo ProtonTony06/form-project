@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/lib/button-styles";
 import { RespuestasList } from "@/components/admin/RespuestasList";
 import { obtenerFormularioPorId } from "@/lib/services/formulariosService";
 import {

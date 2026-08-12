@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Inbox, Pencil, ExternalLink, MessageSquare } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/lib/button-styles";
 import {
   Card,
   CardContent,

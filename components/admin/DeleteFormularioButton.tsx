@@ -78,7 +78,6 @@ export function DeleteFormularioButton({
         loading={loading}
         loadingText="Eliminando…"
         aria-label={`Eliminar ${titulo}`}
-        className="text-red-600 hover:bg-red-50 hover:text-red-700"
       >
         {!loading && (
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

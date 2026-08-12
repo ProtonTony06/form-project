@@ -1,43 +1,13 @@
 "use client";
 
 import * as React from "react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-slate-900 disabled:pointer-events-none disabled:opacity-50",
-  {
-    variants: {
-      variant: {
-        primary:
-          "bg-slate-900 text-white hover:bg-slate-800 active:bg-slate-950",
-        secondary:
-          "bg-slate-100 text-slate-900 hover:bg-slate-200 active:bg-slate-300",
-        outline:
-          "border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 active:bg-slate-100",
-        ghost:
-          "text-slate-700 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200",
-        destructive:
-          "bg-red-600 text-white hover:bg-red-700 active:bg-red-800",
-      },
-      size: {
-        sm: "h-8 px-3 text-xs",
-        md: "h-10 px-4",
-        lg: "h-11 px-6 text-base",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "primary",
-      size: "md",
-    },
-  }
-);
+import { buttonVariants, type ButtonVariantProps } from "@/lib/button-styles";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+    ButtonVariantProps {
   loading?: boolean;
   loadingText?: string;
 }
@@ -54,7 +24,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       ...props
     },
-    ref
+    ref,
   ) => {
     const isDisabled = disabled || loading;
     return (
@@ -75,7 +45,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
       </button>
     );
-  }
+  },
 );
 Button.displayName = "Button";
 
