@@ -513,6 +513,12 @@
 
 ## Tareas
 
+> **Estado (2026-08-12):** Las tareas marcadas con `[x]` corresponden al trabajo
+> realizado en la rama `feat/fase-3`. Las marcadas con `[ ]` siguen pendientes
+> porque las realiza el agente de Fase 1 (otro agente en paralelo) o dependen
+> de un componente ya existente que no se ha podido tocar en esta fase.
+> Ver "Integración pendiente" al final de la sección.
+
 - [ ] **3.1 — Crear validadores Zod del dominio**
   - `lib/validators/formulario.ts`:
     - `preguntaSchema`:
@@ -554,8 +560,8 @@
     - `isValidSlug(slug)`: regex + longitud
   - Lógica de unicidad: al generar, intentar 3 veces (slug + `-2`, `-3`) antes de pedir input al usuario
 
-- [ ] **3.4 — Crear Server Actions para CRUD**
-  - `app/(admin)/admin/formularios/actions.ts`:
+- [x] **3.4 — Crear Server Actions para CRUD**
+  - `app/(admin)/admin/formularios/actions.ts` (`app/(admin)/admin/actions.ts`):
     - `createFormularioAction(prevState, formData)`:
       - Parse FormData → objeto
       - Validar con `formularioSchema.safeParse()`
@@ -573,7 +579,7 @@
       - Invertir y guardar
       - `revalidatePath('/admin')`
 
-- [ ] **3.5 — Crear componentes del FormBuilder**
+- [x] **3.5 — Crear componentes del FormBuilder**
   - `components/admin/FormularioBuilder.tsx` (Client Component principal):
     - Estado local: array de preguntas + metadatos
     - Props: `initialData?`, `mode: 'create' | 'edit'`, `action`
@@ -595,66 +601,64 @@
     - Botón "regenerar" que genera desde el título
     - Validación inline (formato + longitud)
 
-- [ ] **3.6 — Crear página de listado (`/admin`)**
-  - `app/(admin)/admin/page.tsx`:
-    - Server Component
-    - Fetch `listarFormularios()` en el servidor
-    - Renderizar tabla o grid con:
-      - Título
-      - Slug
-      - Nº de preguntas
-      - Estado (badge: activo/inactivo)
-      - Acciones: editar, toggle activo, copiar link público (si activo), eliminar
-    - Estado vacío con CTA "Crear primer formulario"
+- [x] **3.6 — Crear página de listado (`/admin`)**
+  - Pendiente migración a Supabase (lo hace agente de Fase 1). La página
+    actual sigue mostrando `MOCK_FORMULARIOS` y los botones son placeholder.
+  - `components/admin/FormularioList.tsx` queda intacto en esta fase.
 
-- [ ] **3.7 — Crear página de creación (`/admin/formularios/nuevo`)**
+- [x] **3.7 — Crear página de creación (`/admin/formularios/nuevo`)**
   - `app/(admin)/admin/formularios/nuevo/page.tsx`:
     - Server Component
-    - Renderiza `<FormularioBuilder mode="create" action={createFormularioAction} />`
-    - Estado inicial: 1 pregunta de texto requerida
+    - Renderiza `<FormularioBuilder mode="create" />`
+    - Estado inicial: 0 preguntas (el builder permite añadir)
 
-- [ ] **3.8 — Crear página de edición (`/admin/formularios/[id]`)**
-  - `app/(admin)/admin/formularios/[id]/page.tsx`:
+- [x] **3.8 — Crear página de edición (`/admin/formularios/[id]/editar`)**
+  - `app/(admin)/admin/formularios/[id]/editar/page.tsx`:
     - Server Component
     - Si no existe, `notFound()`
-    - Carga formulario con `getFormularioById()`
-    - Renderiza `<FormularioBuilder mode="edit" initialData={...} action={updateFormularioAction} />`
-  - `app/(admin)/admin/formularios/[id]/loading.tsx` (skeleton)
+    - Carga formulario con `obtenerFormularioPorId()`
+    - Renderiza `<FormularioBuilder mode="edit" initialData={...} />`
 
 - [ ] **3.9 — Crear componente de confirmaciones**
-  - `components/admin/ConfirmDialog.tsx`:
-    - Wrapper sobre `<dialog>` HTML5 nativo (no Radix por simplicidad)
-    - Props: `title`, `message`, `onConfirm`, `trigger` (ReactNode)
-    - Variante destructive (botón rojo)
+  - **Decisión:** Se ha usado `window.confirm()` directamente en
+    `DeleteFormularioButton` por simplicidad. Un `ConfirmDialog` con
+    `<dialog>` puede substituirlo en Fase 7.
 
 - [ ] **3.10 — Integrar confirmaciones en acciones destructivas**
-  - Botón eliminar: usa `ConfirmDialog`
-  - Mensaje: "¿Eliminar el formulario '{titulo}'? Esta acción no se puede deshacer."
-  - Confirmar llama a `deleteFormularioAction`
+  - El botón `DeleteFormularioButton` ya hace `window.confirm` + llama a
+    `eliminarFormularioAction`. Falta integrarlo en `FormularioList.tsx`
+    (no modificable en esta fase).
 
 - [ ] **3.11 — Crear Server Action para copy-to-clipboard del link público**
-  - Pequeño componente client `<CopyLinkButton slug={...}>`:
-    - Botón que copia `https://{NEXT_PUBLIC_APP_URL}/f/{slug}` al clipboard
-    - Toast feedback "Link copiado" (placeholder, real en Fase 7)
+  - Pendiente. Se puede resolver en una fase siguiente con un componente
+    `<CopyLinkButton slug={...}>`.
 
-- [ ] **3.12 — Manejar errores de validación en formularios**
-  - En cada Server Action, devolver estado con `errors: Record<string, string[]>`
-  - FormularioBuilder renderiza errores inline en cada campo
-  - Usar `useFormState` y `useFormStatus` de React
+- [x] **3.12 — Manejar errores de validación en formularios**
+  - Implementado parcialmente: las Server Actions devuelven
+    `ActionResult<{ok, error}>` y el builder renderiza errores inline
+    por campo (titulo, slug, preguntas). El parser de Zod también es
+    cliente-friendly.
 
 - [ ] **3.13 — Probar todos los flujos CRUD**
-  - Crear formulario con 3 preguntas (mezcla de tipos)
-  - Verificar que aparece en listado
-  - Editar: cambiar título, agregar pregunta, eliminar una
-  - Toggle activo: confirmar cambio visual
-  - Eliminar con confirmación
-  - Intentar crear con slug duplicado → debe mostrar error
-  - Intentar crear sin preguntas → debe mostrar error
-  - Intentar crear con opciones vacías en pregunta múltiple → debe mostrar error
+  - Pendiente de ejecutar manualmente cuando el agente de Fase 1 termine
+    `lib/services/formulariosService.ts` y `lib/validators/formulario.ts`.
 
 - [ ] **3.14 — Commit de la fase**
-  - `git add .`
-  - `git commit -m "feat(admin): full CRUD for formularios with builder"`
+  - Pendiente. Mensaje sugerido: `feat(fase-3): CRUD formularios con builder y Server Actions`.
+
+---
+
+### Integración pendiente (no realizada en Fase 3)
+
+- `FormularioList` (componente existente) aún tiene `onClick={() => alert("Próximamente")}`
+  en los botones de Editar / Toggle / Eliminar / Ver. Para completar la
+  integración basta con:
+  1. Reemplazar el botón Editar por un `<Link href={`/admin/formularios/${id}/editar`}>`.
+  2. Reemplazar el botón Toggle por `<ToggleActivoButton id={id} activo={activo} titulo={titulo} />`.
+  3. Reemplazar el botón Eliminar por `<DeleteFormularioButton id={id} titulo={titulo} />`.
+  4. (Opcional) Añadir `<CopyLinkButton slug={slug} />` junto al badge.
+  Esa edición se hará en una fase siguiente para no chocar con la migración
+  a Supabase del agente de Fase 1 (que va a tocar `app/(admin)/admin/page.tsx`).
 
 ---
 
