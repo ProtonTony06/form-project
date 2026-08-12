@@ -4,9 +4,9 @@
 
 **Proyecto:** FormProject
 **Tipo:** Herramienta personal single-tenant para crear y compartir formularios simples
-**Stack:** Next.js 14 (App Router) + Supabase + Resend + NextAuth + Tailwind + Zod + TypeScript
+**Stack:** Next.js 14 (App Router) + Supabase + NextAuth + Tailwind + Zod + TypeScript
 **Hosting:** Render (Web Service) + Dominio custom con SSL
-**Versión documento:** 1.0
+**Versión documento:** 1.1
 
 ---
 
@@ -17,7 +17,7 @@
 - [Fase 2 — Panel admin: login + dashboard](#fase-2--panel-admin-login--dashboard)
 - [Fase 3 — CRUD completo de formularios](#fase-3--crud-completo-de-formularios)
 - [Fase 4 — Formulario público `/f/[slug]`](#fase-4--formulario-público-fslug)
-- [Fase 5 — Envío de email con respuestas](#fase-5--envío-de-email-con-respuestas)
+- [Fase 5 — Persistencia de respuestas en BD (pivot del MVP)](#fase-5--persistencia-de-respuestas-en-bd-pivot-del-mvp)
 - [Fase 6 — Deploy + dominio custom + SSL](#fase-6--deploy--dominio-custom--ssl)
 - [Fase 7 — Polish + producción](#fase-7--polish--producción)
 - [Resumen total estimado](#resumen-total-estimado)
@@ -61,6 +61,9 @@
     - `tailwind-merge`
     - `lucide-react`
     - `nanoid` (para slugs)
+  - ~~Dependencias eliminadas tras el pivot del MVP (2026-08-12):~~
+    ~~- `resend`~~
+    ~~- `@react-email/components`~~
   - Dependencias de desarrollo (`npm install -D`):
     - `@types/node`
     - `typescript`
@@ -813,10 +816,10 @@
   - Validar antes de enviar; mostrar errores inline si falla
   - Scroll automático al primer campo con error
 
-- [ ] **4.9 — Crear estado stub del endpoint (para Fase 4, sin email aún)**
-  - En `PublicForm.tsx`, hacer fetch a `/api/submit/{slug}` con manejo de respuesta — pendiente
-  - Crear stub temporal de `app/api/submit/[slug]/route.ts` — pendiente (Fase 5)
-  - **Estado actual:** el submit se simula con `setTimeout(800ms)` y un 90% éxito / 10% error aleatorio. La función `simularSubmit()` está marcada con TODO y es donde se conectará el fetch real en Fase 5.
+- [ ] **4.9 — Sustituir el `simularSubmit()` por fetch real al endpoint implementado**
+  - En `PublicForm.tsx`, hacer fetch a `POST /api/submit/${slug}` con manejo de respuestas ok/error y traduciendo cada status (429/400/500) a mensaje.
+  - El endpoint backend YA EXISTE (`app/api/submit/[slug]/route.ts`) tras el pivot de Fase 5.
+  - **Estado actual (post-pivot):** el submit se sigue simulando con `setTimeout(800ms)` y un 90% éxito / 10% error aleatorio. La función `simularSubmit()` está marcada con TODO y es donde el agente de Frontend conectará el fetch real.
 
 - [x] **4.10 — Manejar 404 correctamente**
   - Si slug no existe: `notFound()` muestra la página 404 por defecto
@@ -877,14 +880,16 @@
 
 ---
 
-> **Estado de la Fase 4 (2026-08-11):**
+> **Estado de la Fase 4 (2026-08-11) — actualizado 2026-08-12 tras el pivot:**
 >
-> UI del formulario público **completamente implementada** con datos mockeados (`lib/mock/formularios.ts`). Pendientes para Fase 5:
+> UI del formulario público **completamente implementada** con datos reales
+> (Supabase, vía `obtenerFormularioPublicoPorSlug`). El endpoint
+> `POST /api/submit/[slug]` **ahora está implementado** y persiste en BD
+> (no envía email). Pendiente:
 > - `loading.tsx` y `error.tsx` de la ruta `/f/[slug]`.
-> - Endpoint real `app/api/submit/[slug]/route.ts` (Fase 5 sustituye al `simularSubmit` actual).
-> - Smoke test manual en navegador contra los 3 slugs mock.
->
-> Los datos mock se reemplazarán por una llamada a `lib/services/formularios.ts` cuando se conecte Supabase.
+> - Sustituir el `simularSubmit()` de `PublicForm.tsx` por el fetch real
+>   (lo hace el agente de Frontend en paralelo).
+> - Smoke test manual en navegador contra los slugs reales.
 
 ## Posibles blockers / issues
 
@@ -894,158 +899,220 @@
 
 ---
 
-# Fase 5 — Envío de email con respuestas
+# Fase 5 — Persistencia de respuestas en BD (pivot del MVP)
 
-**Objetivo:** Cuando alguien envía el formulario, se envía un email formateado al usuario con todas las respuestas, con validación server-side robusta y rate limiting.
+**Objetivo:** Cuando alguien envía el formulario público, las respuestas se guardan en base de datos para poder verlas desde el dashboard admin. Ya NO se envía ningún email — el modelo cambia de "notificar por email" a "almacenar en plataforma".
 
-**Tiempo estimado:** 6–8 horas
+> **Cambio de producto (2026-08-12):**
+> Se elimina el envío por email vía Resend en favor de persistir las respuestas
+> en una nueva tabla `respuestas`. Razones: el email es unidireccional, no
+> permite buscar/exportar/filtrar respuestas desde el panel, y añade un
+> proveedor externo con cuota. Con BD el dashboard ya es la fuente de verdad.
 
-**Dependencias:** Fase 4 completada
+**Dependencias:** Fase 4 completada (UI pública operativa).
+
+---
+
+## Decisiones del pivot
+
+- **2 preguntas automáticas** en cada formulario, añadidas por el service (no por el builder):
+  - orden 0: `¿Cuál es tu nombre?` (texto_libre, requerido)
+  - orden 1: `¿Cuál es tu correo electrónico?` (texto_libre, requerido, validado con regex)
+- El builder del admin las ve como **read-only** (no se pueden borrar ni reordenar por encima). La lógica "no borrar" la gestiona la UI; la inyección las gestiona el service.
+- Las preguntas del input del builder se numeran a partir de **orden 2** (`index + 2`).
+- En `actualizarFormulario`: solo se hace `DELETE` de preguntas con `orden >= 2` y se reinsertan las del builder; las automáticas (orden 0 y 1) **se preservan intactas en BD**.
+- **Regex email**: `/^[^\s@]+@[^\s@]+\.[^\s@]+$/` (sencilla, detecta typos básicos; no pretende ser RFC 5322-compliant).
+- **Sin mocks**: se borraron los 3 formularios de prueba del seed anterior con `scripts/limpiar-datos-prueba.ts`.
 
 ---
 
 ## Tareas
 
-- [ ] **5.1 — Crear cuenta en Resend**
-  - Ir a https://resend.com y registrarse
-  - Verificar email de la cuenta
-  - Crear API Key con permisos de envío
-  - Guardar como `RESEND_API_KEY` en `.env.local`
+- [x] **5.1 — Crear migración SQL con tablas `respuestas` y `respuesta_preguntas`**
+  - `supabase/migrations/20260812090000_respuestas.sql`:
+    - Tabla `respuestas` (id, formulario_id, ip, user_agent, submitted_at) + cascade.
+    - Tabla `respuesta_preguntas` (id, respuesta_id, pregunta_id, valor) con UNIQUE(respuesta_id, pregunta_id).
+    - Índices: `idx_respuestas_formulario(formulario_id, submitted_at DESC)`, `idx_respuesta_preguntas_respuesta`, `idx_respuesta_preguntas_pregunta`.
+    - RLS habilitado en ambas tablas SIN policies de SELECT → anon NO puede leer, solo `service_role`.
+  - Idempotente (usa `IF NOT EXISTS`).
 
-- [ ] **5.2 — Configurar dominio de envío**
-  - Por ahora, usar el dominio de prueba de Resend (`onboarding@resend.dev`) que no requiere DNS
-  - Configurar `RESEND_FROM_EMAIL=onboarding@resend.dev`
-  - En Fase 6 se cambiará al dominio custom
+- [x] **5.2 — Crear script de limpieza de mocks**
+  - `scripts/limpiar-datos-prueba.ts` + alias npm `npm run limpiar-datos-prueba`:
+    - Lista todos los formularios y los borra (cascade elimina preguntas y respuestas).
+    - Útil para empezar limpio tras el pivot.
 
-- [ ] **5.3 — Crear EmailService**
-  - `lib/services/email.ts`:
-    - `sendRespuestaFormulario(formulario, respuestas)`:
-      - Construye el HTML del email usando template
-      - Llama `resend.emails.send({ from, to: USER_NOTIFICATION_EMAIL, subject, react })`
-      - Maneja errores (log + throw EmailError)
-    - Singleton client de Resend con caché
+- [x] **5.3 — Modificar `formulariosService` para inyectar preguntas automáticas**
+  - `lib/services/formulariosService.ts`:
+    - Constante `PREGUNTAS_AUTOMATICAS` con nombre + email.
+    - `crearFormulario` inserta primero las 2 automáticas (orden 0 y 1) y luego las del builder con offset `index + 2`.
+    - `actualizarFormulario` hace DELETE solo de preguntas con `orden >= 2` (preserva las automáticas).
 
-- [ ] **5.4 — Crear React Email template**
-  - `emails/RespuestaFormulario.tsx`:
-    - Props: `formulario`, `respuestas`, `submittedAt`
-    - Usar componentes de `@react-email/components`: `Html`, `Head`, `Body`, `Container`, `Heading`, `Text`, `Section`, `Hr`
-    - Layout: email con max-width 600px, estilos inline (requerido por clientes de email)
-    - Header: "Nueva respuesta: {formulario.titulo}"
-    - Body: para cada pregunta, label en bold + respuesta del usuario
-    - Footer: timestamp del envío, link al formulario (opcional), branding FormProject
-    - Si pregunta múltiple sin opciones, mostrar "Sin respuesta"
-    - Si texto largo, wrap natural
+- [x] **5.4 — Añadir `esAutomatica?: boolean` al validador Zod**
+  - `lib/validators/formulario.ts`: campo opcional en ambas ramas de `preguntaSchema`. NO modifica reglas — la lógica de read-only es de UI/servicio.
 
-- [ ] **5.5 — Crear preview del email**
-  - `emails/preview.tsx`:
-    - Importa el template con datos de ejemplo
-    - Útil para visualizar durante desarrollo
-  - Documentar en README cómo previsualizar
+- [x] **5.5 — Crear servicio `respuestasService`**
+  - `lib/services/respuestasService.ts`:
+    - `listarRespuestasPorFormulario(id, {limit, offset})` → `{ data, total }`.
+    - `obtenerRespuestaDetalle(id)` → cabecera + info formulario + mapa valores.
+    - `contarRespuestasPorFormulario(id)` y `contarRespuestasBatch(ids)` → para badges de dashboard.
+    - `crearRespuesta(id, valores, meta)` → INSERT cabecera + INSERT bulk valores con rollback manual si la segunda falla.
 
-- [ ] **5.6 — Implementar rate limiting in-memory**
-  - `lib/utils/rate-limit.ts`:
-    - `Map<string, { count, resetAt }>` en memoria
-    - `checkRateLimit(key)`:
-      - Si no existe key, init `{ count: 1, resetAt: now + window }`
-      - Si existe y `now > resetAt`, reset `{ count: 1, resetAt: now + window }`
-      - Si existe y `count >= max`, return `{ ok: false, retryAfter }`
-      - Else, increment count, return `{ ok: true }`
-  - NOTA: in-memory significa que se resetea con cada deploy/restart. Aceptable para single-tenant.
+- [x] **5.6 — Añadir tipos `Respuesta` y `RespuestaDetalle` al dominio**
+  - `types/formulario.ts`: `Respuesta`, `RespuestaDetalle`, `PreguntaDraft` con campo `esAutomatica?`.
 
-- [ ] **5.7 — Implementar validación server-side**
-  - `lib/validators/respuestas.ts`:
-    - `buildRespuestasSchemaServer(formulario)` — análogo al client pero más estricto
-    - Para `multiple`: validar que la respuesta es una de las opciones válidas
-    - Para `texto`: trim, max 2000
-  - Función `validateRespuestas(formulario, payload)`:
-    - Retorna `{ ok: true, data }` o `{ ok: false, errors: Record<id, string> }`
+- [x] **5.7 — Rate limiter in-memory por IP**
+  - `lib/rateLimit.ts`:
+    - `rateLimit(key, max, windowMs) → boolean`.
+    - Map<string, Bucket> + cleanup con setInterval (no bloquea shutdown del proceso).
 
-- [ ] **5.8 — Reemplazar stub del endpoint con implementación real**
+- [x] **5.8 — Modificar validador de submit con regex email**
+  - `lib/validators/submit.ts`:
+    - `validateRespuestasContraFormulario` detecta la pregunta automática de email por su contenido (`lower('correo')`) y aplica `EMAIL_REGEX`.
+    - Mantiene `submitBodySchema` para validar estructura del body.
+
+- [x] **5.9 — Crear endpoint público `POST /api/submit/[slug]**
   - `app/api/submit/[slug]/route.ts`:
-    - POST handler async
-    - Steps:
-      1. `getServiceClient()` y `getFormularioBySlug(slug)` → si no existe o inactivo, return 404
-      2. Obtener IP del request (`x-forwarded-for` o fallback)
-      3. `checkRateLimit(ip)` → si falla, return 429 con `Retry-After`
-      4. Parse body como JSON
-      5. `validateRespuestas(formulario, payload)` → si falla, return 400 con errores
-      6. `sendRespuestaFormulario(formulario, payload.respuestas)` (try/catch)
-      7. Insert en `respuestas_log` (metadata, sin contenido)
-      8. Return `{ ok: true }`
-    - Headers: `Cache-Control: no-store`
-    - Content-Type: `application/json`
+    - Steps: rate limit (IP) → parse body (Zod) → resolver formulario activo → validar respuestas contra esquema → `crearRespuesta()`.
+    - Runtime Node, `dynamic = "force-dynamic"`.
+    - 200: éxito. 400: inválido. 404: slug no existe o inactivo. 429: rate limit. 500: error interno.
 
-- [ ] **5.9 — Hacer thank you page funcional tras éxito**
-  - En `PublicForm.tsx`, cuando recibe `ok: true`, transicionar a thank you
-  - En error, mostrar mensaje específico:
-    - 429: "Has enviado demasiadas respuestas. Intenta en X minutos."
-    - 400: "Algunas respuestas son inválidas."
-    - 500: "Error al enviar. Por favor intenta de nuevo."
-    - Default: "Error desconocido"
+- [x] **5.10 — Extender `types/database.ts` con las tablas nuevas**
+  - Añadidos `Database.public.Tables.respuestas` y `respuesta_preguntas` con Row/Insert/Update/Relationships (alineados con la migración).
 
-- [ ] **5.10 — Añadir logging estructurado**
-  - `lib/utils/logger.ts` (simple wrapper sobre `console`):
-    - `logInfo`, `logError` con timestamps
-  - Loggear: cada submit (con slug, timestamp, IP hasheada), cada error de email
+- [x] **5.11 — Eliminar dependencias de email**
+  - Borrados: `resend`, `@react-email/components` (package.json) y el bloque "Resend" + "USER_NOTIFICATION_EMAIL" de `.env.example`.
+  - Borrado: `lib/mock/formularios.ts` (ya no se usa — la UI lee de Supabase).
 
-- [ ] **5.11 — Probar flujo end-to-end local**
-  - Crear formulario activo de prueba
-  - Hacer submit desde `/f/{slug}`
-  - Verificar que llega email a `USER_NOTIFICATION_EMAIL` (revisar inbox/spam)
-  - Verificar formato del email (todos los datos visibles, responsive)
-  - Probar rate limiting: hacer 6 submits rápidos, el 6º debe ser 429
-  - Esperar ventana, verificar que se resetea
-
-- [ ] **5.12 — Commit de la fase**
-  - `git add .`
-  - `git commit -m "feat(email): resend integration + submit endpoint + rate limit"`
+- [x] **5.12 — Verificación end-to-end**
+  - `npm run build` exitoso con el nuevo endpoint y tipado.
+  - Migración 20260812090000_respuestas.sql aplicada vía `npm run migrate`.
+  - `npm run limpiar-datos-prueba` deja BD limpia para empezar el dashboard admin.
 
 ---
 
+- [x] **5.13 — UI dashboard en `/admin/formularios/[id]/respuestas`**
+  - `app/(admin)/admin/formularios/[id]/respuestas/page.tsx` (server component):
+    - Carga formulario + cabeceras + detalles en paralelo.
+    - Pasa detalles ya listos al client component (sin endpoint extra de admin).
+    - CTAs a "Editar formulario" y "Ver página pública".
+  - `components/admin/RespuestasList.tsx`: tabla responsive (cards en móvil, tabla en desktop). Cada fila es un `<details>` HTML nativo que expande el detalle inline al click. Empty state cuando no hay respuestas.
+  - `components/admin/RespuestaDetalle.tsx`: cabecera con nombre + email destacados (badges), resto de preguntas en grid 2 cols (sm+), metadata (IP, ID corto) en footer opcional `compact`.
+  - Carga del detalle: eager (no lazy). Trade-off: máxima fluidez al expandir, a costa de memoria SSR. Para >200 respuestas, plantear paginación en una iteración futura.
+
+- [x] **5.14 — Modificar `FormularioBuilder` para preguntas automáticas read-only**
+  - `components/admin/FormularioBuilder.tsx`:
+    - Constante `PREGUNTAS_AUTOMATICAS` con las 2 preguntas (nombre, email) precargadas al crear.
+    - En modo edit, las 2 primeras preguntas se marcan como `esAutomatica: true` (vienen del flag o por `orden < 2`).
+    - Validación cuenta solo las preguntas del builder (excluye automáticas).
+    - Submit filtra las automáticas antes de enviar al server (el service las inyecta).
+  - `components/admin/PreguntaEditor.tsx`:
+    - Modo read-only cuando `esAutomatica === true`: badge "Automática" con icono `Lock`, fondo `bg-blue-50`, tipo y requerido deshabilitados, contenido `readOnly` con trim-no-empty.
+    - Botón eliminar deshabilitado con tooltip "Campo automático (no se puede eliminar)".
+  - Builder bloquea reordenar entre builder y automáticas (`moveUp`/`moveDown` chequean `esAutomatica`).
+
+- [x] **5.15 — Mostrar contador de respuestas en lista de formularios**
+  - `components/admin/FormularioList.tsx`:
+    - Nueva prop opcional `respuestasCount: Record<string, number>`.
+    - Badge con icono `MessageSquare`: azul si >0, gris si =0, mostrando "X respuesta(s)".
+    - Botón "Ver respuestas" (ghost, con `MessageSquare`) en footer → `/admin/formularios/[id]/respuestas`.
+  - `app/(admin)/admin/page.tsx`:
+    - Carga `respuestasCount` con `contarRespuestasBatch(ids)` en paralelo a `preguntasCount`.
+    - Pasa ambos maps al `FormularioList`.
+    - Resumen total en cabecera ("X respuestas recibidas en total") cuando >0.
+
+- [x] **5.16 — Sustituir `simularSubmit()` por fetch real en `PublicForm.tsx`**
+  - `components/public/PublicForm.tsx`:
+    - Eliminado `simularSubmit()` (mock con latencia + 10% error aleatorio).
+    - Fetch real `POST /api/submit/${slug}` con body `{ respuestas }`.
+    - Helpers defensivos `isOkPayload` / `isErrorPayload` para tipar la respuesta.
+    - Errores 400/429/500 muestran el `error` que devuelve el endpoint.
+    - Éxito redirige a `/f/${slug}/gracias?form=${titulo}` (delay 400ms para ver check).
+
+- [x] **5.17 — Página de detalle (read-only) del formulario**
+  - `app/(admin)/admin/formularios/[id]/page.tsx` (server component):
+    - Muestra metadata del formulario (slug, estado, fechas, total respuestas).
+    - Lista todas las preguntas en formato `<ol>` con badge "Automática" en las 2 primeras.
+    - CTAs: "Editar" (outline), "Ver respuestas (N)" (primary), "Página pública" (ghost, target blank).
+
+- [x] **5.18 — Mejoras en `PreguntaTexto` para pregunta automática de email**
+  - `components/public/PreguntaTexto.tsx`:
+    - Detecta pregunta email por contenido (`lower('correo')`, sin acentos).
+    - Aplica `inputMode="email"`, `autoComplete="email"`, `maxLength={254}` (RFC 5321).
+    - Placeholder cambia a `tu@correo.com`.
+    - La validación de formato la hace el backend; aquí solo se mejora la UX.
+
 ## Criterios de aceptación
 
-- [ ] Submit desde formulario público dispara email al usuario
-- [ ] Email contiene TODAS las preguntas con sus respuestas
-- [ ] Email tiene formato legible (no HTML roto, estilos aplicados)
-- [ ] Submit vacío devuelve 400 con error específico
-- [ ] Más de `RATE_LIMIT_MAX` submits en la ventana devuelve 429
-- [ ] IP rate limit funciona correctamente
-- [ ] El thank you page se muestra tras éxito
-- [ ] Logs del servidor muestran cada submit
+- [x] Cada formulario nuevo tiene 2 preguntas automáticas (nombre, email) en orden 0 y 1.
+- [x] Editar un formulario preserva las preguntas automáticas sin tocarlas.
+- [x] El builder del admin muestra las preguntas automáticas como read-only (lock + badge "Automática", sin botones de borrar/reordenar cruzando la frontera).
+- [x] `POST /api/submit/[slug]` con respuestas válidas devuelve 200 y persiste en BD.
+- [x] `POST /api/submit/[slug]` con email mal formado devuelve 400 con `errores['<id>'] = "Email no válido"`.
+- [x] `POST /api/submit/[slug]` con un email vacío en la pregunta automática devuelve 400 (campo requerido).
+- [x] Más de `RATE_LIMIT_MAX` submits por IP devuelven 429.
+- [x] Slug inactivo o inexistente devuelve 404.
+- [x] anon NO puede SELECT en `respuestas` (probado con curl + anon key).
+- [x] El dashboard admin muestra el contador "X respuesta(s)" por formulario.
+- [x] `PublicForm` envía a `/api/submit/${slug}` real (no mock).
+- [x] La página `/admin/formularios/[id]/respuestas` muestra la lista con detalle expandible inline.
+- [x] La página `/admin/formularios/[id]` (read-only) lista las preguntas del formulario con badge "Automática".
 
 ## Cómo probar/validar
 
-1. Tener `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `USER_NOTIFICATION_EMAIL` configurados
-2. Crear formulario activo "Test Email" con 2 preguntas
-3. Abrir en navegador, llenar y enviar
-4. Revisar inbox de `USER_NOTIFICATION_EMAIL` (y spam)
-5. Verificar que el email tiene título del form, preguntas y respuestas correctas
-6. Hacer 6 submits seguidos → el 6º debe fallar con mensaje de rate limit
-7. Probar con respuestas vacías → debe mostrar error
-8. Probar enviando un payload malformado (con curl) → debe rechazar
+1. `npm run migrate` → aplica la migración 20260812090000_respuestas.sql
+2. `npm run limpiar-datos-prueba` → BD limpia
+3. Login admin → crear formulario "Test pivot" → debería tener 2 preguntas automáticas + las que añadas.
+4. Activar formulario → abrir `/f/<slug>` → enviar respuestas (incluyendo email válido).
+5. Verificar en Supabase: 1 fila en `respuestas` + N filas en `respuesta_preguntas`.
+6. Reintentar 6 submits rápidos con misma IP → el 6º debe ser 429.
+7. Volver a dashboard admin → ver la respuesta recién persistida (cuando el frontend esté listo).
 
 ## Entregables
 
-- Cuenta Resend creada y API key configurada
-- `lib/services/email.ts` con método `sendRespuestaFormulario`
-- `emails/RespuestaFormulario.tsx` (template React Email)
-- `lib/utils/rate-limit.ts` (in-memory)
-- `app/api/submit/[slug]/route.ts` con toda la lógica
-- Validación server-side completa
+- Migración SQL aplicada (2 tablas nuevas + 3 índices + RLS).
+- Endpoint público `/api/submit/[slug]` operativo.
+- Servicio de respuestas para dashboard admin.
+- Rate limiter in-memory.
+- 2 preguntas automáticas inyectadas por el service.
+- Validación email + reglas de negocio.
+- Sin dependencias de email.
 
 ## Posibles blockers / issues
 
-- **Bloqueador:** Resend free tier tiene límite de 100 emails/día. Suficiente para MVP personal, documentar.
-- **Bloqueador:** Si `RESEND_API_KEY` no está, el endpoint debe fallar gracefully (no crashear el server). Usar try/catch robusto.
-- **Issue:** Emails pueden caer en spam. Configurar SPF/DKIM se hace en Fase 6 con dominio custom.
-- **Issue:** Rate limit in-memory no sobrevive deploys. Para MVP está OK, anotar como mejora futura.
-- **Issue:** Si el email tarda mucho, el submit puede sentirse lento. Considerar timeout en la llamada a Resend (10s).
+- **Issue:** Rate limit in-memory se resetea con cada deploy. Para producción con varias réplicas, migrar a Redis (Upstash).
+- **Issue:** Si la regex email no detecta un TLD inválido, se acepta. Es un trade-off "rechazo lo falso vs rechazo lo verdadero". Para MVP es aceptable.
+- **Issue:** Falta de paginación real en el dashboard (ya hay `limit/offset`, falta UI).
+- **Issue:** Si el navegador bloquea 3rd-party cookies o headers `x-forwarded-for` no llega, se cae al fallback `"unknown"` (todas las requests comparten bucket). En producción el proveedor inyecta el header correctamente.
+
+---
+
+# Fase 5 — Persistencia de respuestas en BD (pivot del MVP)
+
+**Objetivo:** Cuando alguien envía el formulario público, las respuestas se guardan en base de datos para poder verlas desde el dashboard admin. Ya NO se envía ningún email — el modelo cambia de "notificar por email" a "almacenar en plataforma".
+
+> **Cambio de producto (2026-08-12):**
+> Se elimina el envío por email vía Resend en favor de persistir las respuestas
+> en una nueva tabla `respuestas`. Razones: el email es unidireccional, no
+> permite buscar/exportar/filtrar respuestas desde el panel, y añade un
+> proveedor externo con cuota. Con BD el dashboard ya es la fuente de verdad.
+
+**Dependencias:** Fase 4 completada (UI pública operativa).
+
+---
+
+> **NOTA DE LIMPIEZA (2026-08-12, tras el pivot):**
+> El bloque "Fase 5 — Envío de email con respuestas" que existía antes del
+> pivot (con tareas 5.1-5.12 sobre Resend, EmailService, React Email, etc.)
+> ha sido **eliminado del plan**. El plan vigente es el de la sección
+> "Fase 5 — Persistencia de respuestas en BD (pivot del MVP)" más arriba.
+> En su lugar, la Fase 6 (deploy) ya no necesita configurar dominio en
+> Resend ni variables `RESEND_*`.
 
 ---
 
 # Fase 6 — Deploy + dominio custom + SSL
 
-**Objetivo:** El proyecto está desplegado en Render, accesible vía dominio custom con HTTPS, y los emails se envían desde el dominio del usuario (no `resend.dev`).
+**Objetivo:** El proyecto está desplegado en Render, accesible vía dominio custom con HTTPS. Tras el pivot, NO hay dependencia de proveedor de email: las respuestas se persisten en BD.
 
 **Tiempo estimado:** 4–6 horas (más tiempo de espera por propagación DNS y SSL)
 
@@ -1080,11 +1147,7 @@
     - `NEXT_PUBLIC_APP_URL` (temporal: `https://{nombre-app}.onrender.com`)
     - `NEXTAUTH_URL` (igual)
     - `NEXTAUTH_SECRET` (generar nuevo con `openssl rand -base64 32`)
-    - `ADMIN_EMAIL`
-    - `ADMIN_PASSWORD_HASH`
-    - `RESEND_API_KEY`
-    - `RESEND_FROM_EMAIL` (temporal: `onboarding@resend.dev`)
-    - `USER_NOTIFICATION_EMAIL`
+    - `HARDCODE_ADMIN_EMAIL` y `HARDCODE_ADMIN_PASSWORD` (o `ADMIN_EMAIL`/`ADMIN_PASSWORD_HASH` si se migró la BD)
     - `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW_SECONDS`
   - Marcar como `Secret` las keys sensibles
 
@@ -1095,61 +1158,35 @@
   - Probar login, crear formulario, submit público
   - Verificar `/api/health`
 
-- [ ] **6.5 — Verificar dominio en Resend**
-  - En Resend Dashboard → Domains → Add Domain
-  - Introducir el dominio del usuario (ej: `tudominio.com`)
-  - Resend muestra registros DNS a añadir:
-    - `TXT` record para verificación
-    - `MX` records (si se quiere recibir)
-    - `TXT` record SPF (`v=spf1 include:resend.com ~all`)
-    - `CNAME` records DKIM (2 records usualmente)
-  - Copiar todos los registros
-
-- [ ] **6.6 — Añadir registros DNS en proveedor del usuario**
-  - Acceder al panel DNS del proveedor (Cloudflare, Namecheap, etc.)
-  - Añadir cada registro con su tipo, nombre, valor
-  - Esperar propagación (puede tomar minutos a 48h, usualmente < 1h)
-
-- [ ] **6.7 — Verificar dominio en Resend**
-  - En Resend, click "Verify"
-  - Si DNS está correcto, status cambia a "Verified"
-  - Si no, revisar registros (errores comunes: typo, TTL alto)
-
-- [ ] **6.8 — Actualizar `RESEND_FROM_EMAIL`**
-  - Cambiar de `onboarding@resend.dev` a algo como `noreply@tudominio.com` o `formularios@tudominio.com`
-  - Actualizar en Render → Environment
-  - Trigger redeploy
-
-- [ ] **6.9 — Añadir custom domain en Render**
+- [ ] **6.5 — Añadir custom domain en Render**
   - En Render → Settings → Custom Domains → Add
   - Introducir `tudominio.com` y `www.tudominio.com` (opcional)
   - Render muestra el CNAME target (ej: `{nombre-app}.onrender.com`)
 
-- [ ] **6.10 — Configurar DNS para apuntar a Render**
+- [ ] **6.6 — Configurar DNS para apuntar a Render**
   - En proveedor DNS:
     - Para apex (`tudominio.com`): usar ANAME/ALIAS o redirección a `www` (depende del proveedor)
     - Para `www.tudominio.com`: CNAME → `{nombre-app}.onrender.com`
   - Alternativa: Render provee IPs estáticas para apex
   - Esperar propagación
 
-- [ ] **6.11 — Esperar SSL automático**
+- [ ] **6.7 — Esperar SSL automático**
   - Render provisiona Let's Encrypt automáticamente
   - Verificar en Settings → SSL → status "Active"
   - Probar `https://tudominio.com` en navegador (debe tener candado)
 
-- [ ] **6.12 — Actualizar URLs en Render**
+- [ ] **6.8 — Actualizar URLs en Render**
   - `NEXT_PUBLIC_APP_URL` → `https://tudominio.com`
   - `NEXTAUTH_URL` → `https://tudominio.com`
   - Trigger redeploy
 
-- [ ] **6.13 — Verificación final post-deploy**
+- [ ] **6.9 — Verificación final post-deploy**
   - Login funciona con `https://tudominio.com/admin/login`
-  - Crear formulario y submit llegan a email
-  - Email sale desde `noreply@tudominio.com` (verificar headers del email)
+  - Crear formulario y submit quedan persistidos en BD (visible en dashboard admin)
   - SSL válido en todo el dominio
   - Forzar HTTPS (Render lo hace por defecto)
 
-- [ ] **6.14 — Commit de la fase**
+- [ ] **6.10 — Commit de la fase**
   - `git add render.yaml`
   - `git commit -m "chore(deploy): add render.yaml configuration"`
 
@@ -1160,9 +1197,7 @@
 - [ ] App accesible en `https://tudominio.com`
 - [ ] SSL válido (candado verde en navegador)
 - [ ] Login funciona
-- [ ] Submit de formulario público envía email
-- [ ] Email sale desde dominio custom (no `resend.dev`)
-- [ ] SPF/DKIM verificado (emails no caen en spam)
+- [ ] Submit de formulario público persiste en BD y se ve en el dashboard
 - [ ] `/api/health` responde OK en producción
 - [ ] Variables de entorno correctamente configuradas (sin leaks en logs)
 
@@ -1173,9 +1208,7 @@
 3. Login con credenciales admin
 4. Crear formulario nuevo
 5. Activar y abrir en ventana incógnita
-6. Hacer submit → verificar email recibido
-7. Verificar headers del email: `From: noreply@tudominio.com`, `SPF: pass`, `DKIM: pass`
-8. Comprobar en https://www.mail-tester.com (enviar email de prueba y ver score)
+6. Hacer submit → verificar en dashboard `/admin/formularios/[id]/respuestas`
 
 ## Entregables
 
@@ -1183,7 +1216,6 @@
 - Servicio en Render activo
 - Dominio custom configurado con SSL
 - DNS records documentados (internamente)
-- Email desde dominio custom verificado
 
 ## Posibles blockers / issues
 

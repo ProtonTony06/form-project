@@ -112,6 +112,71 @@ export interface Database {
         };
         Relationships: [];
       };
+      respuestas: {
+        Row: {
+          id: string;
+          formulario_id: string;
+          ip: string | null;
+          user_agent: string | null;
+          submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          formulario_id: string;
+          ip?: string | null;
+          user_agent?: string | null;
+          submitted_at?: string;
+        };
+        Update: {
+          id?: string;
+          formulario_id?: string;
+          ip?: string | null;
+          user_agent?: string | null;
+          submitted_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "respuestas_formulario_id_fkey";
+            columns: ["formulario_id"];
+            referencedRelation: "formularios";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      respuesta_preguntas: {
+        Row: {
+          id: string;
+          respuesta_id: string;
+          pregunta_id: string;
+          valor: string;
+        };
+        Insert: {
+          id?: string;
+          respuesta_id: string;
+          pregunta_id: string;
+          valor: string;
+        };
+        Update: {
+          id?: string;
+          respuesta_id?: string;
+          pregunta_id?: string;
+          valor?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "respuesta_preguntas_respuesta_id_fkey";
+            columns: ["respuesta_id"];
+            referencedRelation: "respuestas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "respuesta_preguntas_pregunta_id_fkey";
+            columns: ["pregunta_id"];
+            referencedRelation: "preguntas";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

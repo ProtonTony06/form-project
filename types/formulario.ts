@@ -32,6 +32,9 @@ export interface FormularioConPreguntas extends Formulario {
 
 /**
  * Tipo usado en el builder del admin (preguntas sin ID aún).
+ * `esAutomatica` se usa solo en la capa de UI/servicio para bloquear
+ * borrar las 2 preguntas automáticas que añade el service; no se persiste
+ * (las automáticas se identifican por orden 0/1 en BD).
  */
 export interface PreguntaDraft {
   id?: string; // presente al editar
@@ -39,4 +42,24 @@ export interface PreguntaDraft {
   contenido: string;
   opciones: string[] | null;
   requerido: boolean;
+  esAutomatica?: boolean;
+}
+
+// =============================================================================
+// Respuestas (Fase 5 — pivot del MVP)
+// =============================================================================
+
+/** Cabecera de una respuesta (un envío). */
+export interface Respuesta {
+  id: string;
+  formulario_id: string;
+  ip: string | null;
+  user_agent: string | null;
+  submitted_at: string;
+}
+
+/** Detalle completo: cabecera + info del formulario + valores por pregunta. */
+export interface RespuestaDetalle extends Respuesta {
+  formulario: Pick<FormularioConPreguntas, "id" | "slug" | "titulo">;
+  valores: Record<string, string>;
 }

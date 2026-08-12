@@ -9,11 +9,11 @@
     "lint": "next lint",
     "seed": "tsx scripts/seed.ts",
     "migrate": "tsx scripts/migrate.ts",
+    "limpiar-datos-prueba": "tsx scripts/limpiar-datos-prueba.ts",
     "db:types": "dotenv -e .env.local -- sh -c 'npx supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" --schema public > types/database.ts'"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
-    "@react-email/components": "^1.0.12",
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.3",
     "bcryptjs": "^3.0.3",
@@ -28,7 +28,6 @@
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.85.0",
-    "resend": "^6.19.0",
     "tailwind-merge": "^3.6.0",
     "zod": "^4.4.3"
   },

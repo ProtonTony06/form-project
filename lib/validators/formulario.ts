@@ -15,6 +15,12 @@ export const SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
  *   - `opcion_multiple` → `opciones` es array de strings (2..20, cada uno 1..200).
  *   - `texto_libre`     → `opciones` debe ser `null`.
  *
+ * `esAutomatica` (opcional) marca las preguntas que el servicio inyecta en
+ * todo formulario creado (nombre + email). NO modifica reglas de
+ * validación: la lógica de read-only/no-borrable vive en la UI
+ * (`PreguntaEditor` las marca como bloqueadas). El servicio se ocupa de
+ * añadirlas/preservarlas.
+ *
  * Usar `discriminatedUnion` permite que Zod aplique reglas distintas en cada
  * rama en tiempo de validación (y de tipos).
  */
@@ -36,6 +42,7 @@ export const preguntaSchema = z.discriminatedUnion("tipo", [
       .min(2, "Añade al menos 2 opciones.")
       .max(20, "Máximo 20 opciones."),
     requerido: z.boolean(),
+    esAutomatica: z.boolean().optional(),
   }),
   z.object({
     id: z.string().uuid().optional(),
@@ -46,6 +53,7 @@ export const preguntaSchema = z.discriminatedUnion("tipo", [
       .max(500),
     opciones: z.null(),
     requerido: z.boolean(),
+    esAutomatica: z.boolean().optional(),
   }),
 ]);
 

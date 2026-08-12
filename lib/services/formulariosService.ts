@@ -24,6 +24,25 @@ import type {
 
 type PreguntaInsert = Database["public"]["Tables"]["preguntas"]["Insert"];
 
+/**
+ * Preguntas automáticas que el sistema añade a todo nuevo formulario.
+ *
+ * - orden 0: nombre (texto libre, requerido).
+ * - orden 1: correo electrónico (texto libre, requerido).
+ *
+ * Las preguntas del builder se numeran a continuación (orden 2, 3, …).
+ * Estas preguntas NO se muestran en el builder del admin (son read-only
+ * desde su perspectiva) pero SÍ las ven los respondedores en `/f/[slug]`.
+ *
+ * El servicio las inyecta aquí; el validador Zod acepta el flag
+ * `esAutomatica` opcional y la lógica de "no permitir borrarlas" vive en
+ * la capa de UI (el builder las marca como read-only).
+ */
+const PREGUNTAS_AUTOMATICAS = [
+  { contenido: "¿Cuál es tu nombre?", requerido: true },
+  { contenido: "¿Cuál es tu correo electrónico?", requerido: true },
+] as const;
+
 /** Error genérico con contexto para facilitar el logging. */
 class FormulariosServiceError extends Error {
   constructor(message: string, public readonly cause?: unknown) {
@@ -149,16 +168,26 @@ export async function crearFormulario(
     throw new FormulariosServiceError("crearFormulario (insert)", errInsert);
   }
 
-  const preguntasInsert: PreguntaInsert[] = input.preguntas.map(
-    (p: PreguntaInput, index) => ({
+  // Construimos las filas: primero las automáticas (orden 0 y 1),
+  // después las del builder (que llegan SIN las automáticas) con un offset.
+  const preguntasInsert: PreguntaInsert[] = [
+    ...PREGUNTAS_AUTOMATICAS.map((p, idx) => ({
       formulario_id: formulario.id,
-      orden: index,
+      orden: idx,
+      tipo: "texto_libre" as const,
+      contenido: p.contenido,
+      opciones: null,
+      requerido: p.requerido,
+    })),
+    ...input.preguntas.map((p: PreguntaInput, index) => ({
+      formulario_id: formulario.id,
+      orden: index + PREGUNTAS_AUTOMATICAS.length,
       tipo: p.tipo,
       contenido: p.contenido,
       opciones: p.tipo === "opcion_multiple" ? p.opciones : null,
       requerido: p.requerido,
-    }),
-  );
+    })),
+  ];
 
   const { error: errPreguntas } = await supabase
     .from("preguntas")
@@ -177,12 +206,16 @@ export async function crearFormulario(
 }
 
 /**
- * Actualiza un formulario y reemplaza TODAS sus preguntas.
+ * Actualiza un formulario y reemplaza sus preguntas (excepto las automáticas).
  *
- * Estrategia: UPDATE el `formulario`, luego DELETE todas las preguntas
- * existentes, y finalmente INSERT las nuevas. Si falla el INSERT, se
- * propaga el error y el formulario queda sin preguntas (rollback manual
- * sería complejo sin una transacción DDL).
+ * Estrategia:
+ *   1. UPDATE del `formulario` (titulo/slug/descripcion).
+ *   2. DELETE solo de las preguntas con `orden >= PREGUNTAS_AUTOMATICAS.length`
+ *      (preservamos las 2 automáticas por id, no las tocamos).
+ *   3. INSERT de las preguntas nuevas del input con offset.
+ *
+ * Si falla el INSERT, se propaga el error y el formulario queda con solo
+ * las automáticas (el admin puede volver a abrir el editor y reintentar).
  *
  * Devuelve `{ id }` para mantener la simetría con `crearFormulario` y el
  * contrato que esperan las Server Actions de Fase 3.
@@ -205,11 +238,13 @@ export async function actualizarFormulario(
     throw new FormulariosServiceError("actualizarFormulario (update)", errUpdate);
   }
 
-  // Reemplazo total de preguntas.
+  // Borramos SOLO las preguntas del builder (orden >= cantidad de automáticas).
+  // Las automáticas se preservan intactas en BD.
   const { error: errDelete } = await supabase
     .from("preguntas")
     .delete()
-    .eq("formulario_id", input.id);
+    .eq("formulario_id", input.id)
+    .gte("orden", PREGUNTAS_AUTOMATICAS.length);
 
   if (errDelete) {
     throw new FormulariosServiceError(
@@ -221,7 +256,7 @@ export async function actualizarFormulario(
   const preguntasInsert: PreguntaInsert[] = input.preguntas.map(
     (p: PreguntaInput, index) => ({
       formulario_id: input.id,
-      orden: index,
+      orden: index + PREGUNTAS_AUTOMATICAS.length,
       tipo: p.tipo,
       contenido: p.contenido,
       opciones: p.tipo === "opcion_multiple" ? p.opciones : null,
