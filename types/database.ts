@@ -1,13 +1,13 @@
 /**
  * Tipos de la base de datos Supabase.
  *
- * En Fase 1 se generarán automáticamente con:
- *   `npm run db:types`
- * (requiere `SUPABASE_PROJECT_ID` real en `.env.local` y CLI de Supabase).
+ * Generados manualmente para Fase 1 (la CLI `supabase gen types` requiere
+ * autenticación al servicio y, en algunos entornos, no es invocable de forma
+ * desatendida). Mantenerlos sincronizados con `supabase/migrations/`.
  *
- * Por ahora dejamos un placeholder mínimo para que los clientes
- * `createBrowserClient<Database>`, `createServerClient<Database>` y
- * `createClient<Database>` compilen sin errores.
+ * Si en el futuro se prefiere regenerar automáticamente, ejecutar:
+ *   `npm run db:types`
+ * (requiere Supabase CLI autenticada).
  */
 
 export type Json =
@@ -20,9 +20,104 @@ export type Json =
 
 export interface Database {
   public: {
-    Tables: Record<string, never>;
+    Tables: {
+      formularios: {
+        Row: {
+          id: string;
+          slug: string;
+          titulo: string;
+          descripcion: string | null;
+          activo: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          titulo: string;
+          descripcion?: string | null;
+          activo?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          slug?: string;
+          titulo?: string;
+          descripcion?: string | null;
+          activo?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      preguntas: {
+        Row: {
+          id: string;
+          formulario_id: string;
+          orden: number;
+          tipo: Database["public"]["Enums"]["tipo_pregunta"];
+          contenido: string;
+          opciones: Json | null;
+          requerido: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          formulario_id: string;
+          orden: number;
+          tipo: Database["public"]["Enums"]["tipo_pregunta"];
+          contenido: string;
+          opciones?: Json | null;
+          requerido?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          formulario_id?: string;
+          orden?: number;
+          tipo?: Database["public"]["Enums"]["tipo_pregunta"];
+          contenido?: string;
+          opciones?: Json | null;
+          requerido?: boolean;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "preguntas_formulario_id_fkey";
+            columns: ["formulario_id"];
+            referencedRelation: "formularios";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      admin_user: {
+        Row: {
+          id: string;
+          email: string;
+          password_hash: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          email: string;
+          password_hash: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          email?: string;
+          password_hash?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+    };
     Views: Record<string, never>;
     Functions: Record<string, never>;
-    Enums: Record<string, never>;
+    Enums: {
+      tipo_pregunta: "opcion_multiple" | "texto_libre";
+    };
+    CompositeTypes: Record<string, never>;
   };
 }

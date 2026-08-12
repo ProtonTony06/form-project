@@ -1,20 +1,21 @@
 /**
  * Configuración de NextAuth v5 (Auth.js).
  *
- * Estado actual (Fase 2): credenciales hardcoded en variables de entorno.
- *   - HARDCODE_ADMIN_EMAIL
- *   - HARDCODE_ADMIN_PASSWORD  (texto plano, solo para desarrollo)
+ * Migración a Supabase (Fase 1): ahora valida contra la tabla `admin_user`
+ * con bcrypt (cost 12). Sigue soportando el fallback hardcoded (HARDCODE_ADMIN_*
+ * en `.env.local`) para no romper el flujo de desarrollo.
  *
- * Migración a Supabase (Fase 1 o posterior):
- *   1. Crear tabla `admin_user` con columnas: id, email, password_hash, created_at.
- *   2. Reemplazar el `authorize` de abajo por una query a Supabase que compare
- *      `email` y verifique `password_hash` con bcrypt (ver `lib/utils.ts`).
- *   3. Mantener el `id` que viene de BD para que `session.user.id` siga funcionando.
+ * Orden de prioridad en `authorize`:
+ *   1. Si las credenciales coinciden con HARDCODE_ADMIN_*, pasa.
+ *      (útil para tests locales sin tener que sembrar la BD).
+ *   2. Si no, valida contra la tabla `admin_user` con bcrypt.
+ *   3. Cualquier otro caso → null (login falla).
  *
  * El resto (callbacks, página de login, middleware) NO cambia.
  */
 import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
+import { verificarCredencialesAdmin } from "@/lib/services/authService";
 
 declare module "next-auth" {
   interface Session {
@@ -35,7 +36,8 @@ if (!HARDCODE_ADMIN_EMAIL || !HARDCODE_ADMIN_PASSWORD) {
   // Aviso en consola pero no rompemos el build: las variables se validan
   // dentro de `authorize` con un error legible.
   console.warn(
-    "[auth] HARDCODE_ADMIN_EMAIL / HARDCODE_ADMIN_PASSWORD no están definidas. El login fallará hasta configurarlas."
+    "[auth] HARDCODE_ADMIN_EMAIL / HARDCODE_ADMIN_PASSWORD no están definidas. " +
+      "Login solo funcionará contra la tabla admin_user de Supabase.",
   );
 }
 
@@ -60,19 +62,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = String(credentials?.password ?? "");
 
         if (!email || !password) return null;
-        if (!HARDCODE_ADMIN_EMAIL || !HARDCODE_ADMIN_PASSWORD) return null;
 
-        // Comparación simple en texto plano (solo dev). En producción usar bcrypt contra la BD.
-        const expectedEmail = HARDCODE_ADMIN_EMAIL.trim().toLowerCase();
-        if (email !== expectedEmail) return null;
-        if (password !== HARDCODE_ADMIN_PASSWORD) return null;
+        // ─── 1) Fallback hardcoded para dev rápido ──────────────────────
+        if (
+          HARDCODE_ADMIN_EMAIL &&
+          HARDCODE_ADMIN_PASSWORD &&
+          email === HARDCODE_ADMIN_EMAIL.trim().toLowerCase() &&
+          password === HARDCODE_ADMIN_PASSWORD
+        ) {
+          return {
+            id: "admin-hardcoded",
+            email,
+            name: "Admin (hardcoded)",
+          };
+        }
 
-        // Devolvemos un id estable (en Supabase será el id real de la fila).
-        return {
-          id: "admin-hardcoded",
-          email: expectedEmail,
-          name: "Admin",
-        };
+        // ─── 2) Validación real contra Supabase + bcrypt ────────────────
+        try {
+          const user = await verificarCredencialesAdmin(email, password);
+          if (!user) return null;
+          return {
+            id: user.id,
+            email: user.email,
+            name: "Admin",
+          };
+        } catch (error) {
+          // Si la BD no está accesible, no bloqueamos: devolvemos null
+          // para que el usuario vea "credenciales inválidas" en vez de un 500.
+          console.error("[auth] Error verificando credenciales:", error);
+          return null;
+        }
       },
     }),
   ],

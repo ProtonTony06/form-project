@@ -1,91 +1,300 @@
 /**
- * ════════════════════════════════════════════════════════════════════════════
- *  STUB TEMPORAL — Lo reemplaza el agente de Fase 1 con la versión real.
- * ════════════════════════════════════════════════════════════════════════════
- *  ESTE ARCHIVO ES UN PLACEHOLDER. El agente de Fase 1 está construyendo
- *  la versión real del service en paralelo. Si encuentras este stub en
- *  disco, **sobreescríbelo** con la implementación real.
+ * Servicio de formularios (CRUD).
  *
- *  Esta capa es la que la UI de Fase 3 consume indirectamente a través
- *  de las Server Actions en `app/(admin)/admin/actions.ts`.
+ * Usa `service_role` para bypasear RLS. Pensado para Server Actions y
+ * Route Handlers administrativos. NO importar desde Client Components.
  *
- *  Contrato esperado para la versión final:
- *   - crearFormulario(input) → FormularioConPreguntas
- *   - actualizarFormulario(input) → { id }
- *   - eliminarFormulario(id) → void
- *   - toggleActivo(id, activo) → void
- *   - obtenerFormularioPorId(id) → FormularioConPreguntas
- * ════════════════════════════════════════════════════════════════════════════
+ * Las operaciones de escritura (`crear`, `actualizar`, `eliminar`,
+ * `toggleActivo`) hacen las preguntas en una transacción lógica (DELETE + INSERT
+ * o INSERT en bloque). Si cualquier parte falla se propaga el error.
  */
-
-import type { FormularioConPreguntas } from "@/types/formulario";
+import { createServiceClient } from "@/lib/supabase/service";
+import type {
+  Formulario,
+  FormularioConPreguntas,
+  Pregunta,
+  TipoPregunta,
+} from "@/types/formulario";
+import type { Database } from "@/types/database";
 import type {
   FormularioCreateInput,
   FormularioUpdateInput,
+  PreguntaInput,
 } from "@/lib/validators/formulario";
 
-let _stubCounter = 0;
-function _nextId(prefix: string): string {
-  _stubCounter += 1;
-  return `stub-${prefix}-${Date.now()}-${_stubCounter}`;
+type PreguntaInsert = Database["public"]["Tables"]["preguntas"]["Insert"];
+
+/** Error genérico con contexto para facilitar el logging. */
+class FormulariosServiceError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = "FormulariosServiceError";
+  }
 }
 
-export async function crearFormulario(
-  input: FormularioCreateInput
-): Promise<FormularioConPreguntas> {
-  const now = new Date().toISOString();
+/**
+ * Lista todos los formularios (resumen, sin preguntas).
+ * Ordena por `created_at` DESC para que los más recientes aparezcan arriba.
+ */
+export async function listarFormularios(): Promise<Formulario[]> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("formularios")
+    .select("id, slug, titulo, descripcion, activo, created_at, updated_at")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new FormulariosServiceError("listarFormularios", error);
+  return (data ?? []) as Formulario[];
+}
+
+/**
+ * Devuelve un formulario por id con todas sus preguntas ordenadas.
+ */
+export async function obtenerFormularioPorId(
+  id: string,
+): Promise<FormularioConPreguntas | null> {
+  const supabase = createServiceClient();
+
+  const { data: formulario, error: errForm } = await supabase
+    .from("formularios")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errForm) {
+    throw new FormulariosServiceError("obtenerFormularioPorId (form)", errForm);
+  }
+  if (!formulario) return null;
+
+  const { data: preguntas, error: errPreg } = await supabase
+    .from("preguntas")
+    .select("*")
+    .eq("formulario_id", id)
+    .order("orden", { ascending: true });
+
+  if (errPreg) {
+    throw new FormulariosServiceError("obtenerFormularioPorId (preg)", errPreg);
+  }
+
   return {
-    id: _nextId("form"),
-    slug: input.slug,
-    titulo: input.titulo,
-    descripcion: input.descripcion ?? null,
-    activo: true,
-    created_at: now,
-    updated_at: now,
-    preguntas: input.preguntas.map((p: FormularioCreateInput["preguntas"][number], i: number) => ({
-      id: _nextId(`p-${i}`),
-      formulario_id: "stub-form",
-      orden: i,
-      tipo: p.tipo,
-      contenido: p.contenido,
-      opciones: p.opciones ?? null,
-      requerido: p.requerido,
-      created_at: now,
-    })),
+    ...(formulario as Formulario),
+    preguntas: (preguntas ?? []) as Pregunta[],
   };
 }
 
+/**
+ * Devuelve un formulario público por slug. SOLO si está `activo = true`.
+ * Devuelve `null` si no existe, está inactivo o el slug es inválido.
+ */
+export async function obtenerFormularioPublicoPorSlug(
+  slug: string,
+): Promise<FormularioConPreguntas | null> {
+  const supabase = createServiceClient();
+
+  const { data: formulario, error: errForm } = await supabase
+    .from("formularios")
+    .select("id, slug, titulo, descripcion, activo, created_at, updated_at")
+    .eq("slug", slug)
+    .eq("activo", true)
+    .maybeSingle();
+
+  if (errForm) {
+    throw new FormulariosServiceError(
+      "obtenerFormularioPublicoPorSlug (form)",
+      errForm,
+    );
+  }
+  if (!formulario) return null;
+
+  const { data: preguntas, error: errPreg } = await supabase
+    .from("preguntas")
+    .select("*")
+    .eq("formulario_id", formulario.id)
+    .order("orden", { ascending: true });
+
+  if (errPreg) {
+    throw new FormulariosServiceError(
+      "obtenerFormularioPublicoPorSlug (preg)",
+      errPreg,
+    );
+  }
+
+  return {
+    ...(formulario as Formulario),
+    preguntas: (preguntas ?? []) as Pregunta[],
+  };
+}
+
+/**
+ * Crea un formulario (inactivo) con sus preguntas en bloque.
+ * Devuelve el id y slug del formulario creado.
+ */
+export async function crearFormulario(
+  input: FormularioCreateInput,
+): Promise<{ id: string; slug: string }> {
+  const supabase = createServiceClient();
+
+  const { data: formulario, error: errInsert } = await supabase
+    .from("formularios")
+    .insert({
+      slug: input.slug,
+      titulo: input.titulo,
+      descripcion: input.descripcion ?? null,
+      activo: false,
+    })
+    .select("id, slug")
+    .single();
+
+  if (errInsert || !formulario) {
+    throw new FormulariosServiceError("crearFormulario (insert)", errInsert);
+  }
+
+  const preguntasInsert: PreguntaInsert[] = input.preguntas.map(
+    (p: PreguntaInput, index) => ({
+      formulario_id: formulario.id,
+      orden: index,
+      tipo: p.tipo,
+      contenido: p.contenido,
+      opciones: p.tipo === "opcion_multiple" ? p.opciones : null,
+      requerido: p.requerido,
+    }),
+  );
+
+  const { error: errPreguntas } = await supabase
+    .from("preguntas")
+    .insert(preguntasInsert);
+
+  if (errPreguntas) {
+    // Si fallan las preguntas, intentamos limpiar el formulario creado.
+    await supabase.from("formularios").delete().eq("id", formulario.id);
+    throw new FormulariosServiceError(
+      "crearFormulario (preguntas)",
+      errPreguntas,
+    );
+  }
+
+  return { id: formulario.id, slug: formulario.slug };
+}
+
+/**
+ * Actualiza un formulario y reemplaza TODAS sus preguntas.
+ *
+ * Estrategia: UPDATE el `formulario`, luego DELETE todas las preguntas
+ * existentes, y finalmente INSERT las nuevas. Si falla el INSERT, se
+ * propaga el error y el formulario queda sin preguntas (rollback manual
+ * sería complejo sin una transacción DDL).
+ *
+ * Devuelve `{ id }` para mantener la simetría con `crearFormulario` y el
+ * contrato que esperan las Server Actions de Fase 3.
+ */
 export async function actualizarFormulario(
-  input: FormularioUpdateInput
+  input: FormularioUpdateInput,
 ): Promise<{ id: string }> {
+  const supabase = createServiceClient();
+
+  const { error: errUpdate } = await supabase
+    .from("formularios")
+    .update({
+      slug: input.slug,
+      titulo: input.titulo,
+      descripcion: input.descripcion ?? null,
+    })
+    .eq("id", input.id);
+
+  if (errUpdate) {
+    throw new FormulariosServiceError("actualizarFormulario (update)", errUpdate);
+  }
+
+  // Reemplazo total de preguntas.
+  const { error: errDelete } = await supabase
+    .from("preguntas")
+    .delete()
+    .eq("formulario_id", input.id);
+
+  if (errDelete) {
+    throw new FormulariosServiceError(
+      "actualizarFormulario (delete)",
+      errDelete,
+    );
+  }
+
+  const preguntasInsert: PreguntaInsert[] = input.preguntas.map(
+    (p: PreguntaInput, index) => ({
+      formulario_id: input.id,
+      orden: index,
+      tipo: p.tipo,
+      contenido: p.contenido,
+      opciones: p.tipo === "opcion_multiple" ? p.opciones : null,
+      requerido: p.requerido,
+    }),
+  );
+
+  if (preguntasInsert.length > 0) {
+    const { error: errInsert } = await supabase
+      .from("preguntas")
+      .insert(preguntasInsert);
+
+    if (errInsert) {
+      throw new FormulariosServiceError(
+        "actualizarFormulario (insert preguntas)",
+        errInsert,
+      );
+    }
+  }
+
   return { id: input.id };
 }
 
+/** Elimina un formulario (cascade borra preguntas). */
 export async function eliminarFormulario(id: string): Promise<void> {
-  void id;
+  const supabase = createServiceClient();
+  const { error } = await supabase.from("formularios").delete().eq("id", id);
+  if (error) throw new FormulariosServiceError("eliminarFormulario", error);
 }
 
+/** Activa o desactiva un formulario. */
 export async function toggleActivo(
   id: string,
-  activo: boolean
+  activo: boolean,
 ): Promise<void> {
-  void id;
-  void activo;
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from("formularios")
+    .update({ activo })
+    .eq("id", id);
+  if (error) throw new FormulariosServiceError("toggleActivo", error);
 }
 
-export async function obtenerFormularioPorId(
-  id: string
-): Promise<FormularioConPreguntas> {
-  void id;
-  const now = new Date().toISOString();
-  return {
-    id: "stub-form",
-    slug: "stub-form",
-    titulo: "Stub",
-    descripcion: null,
-    activo: true,
-    created_at: now,
-    updated_at: now,
-    preguntas: [],
-  };
+/**
+ * Helper para Server Actions: cuenta cuántas preguntas tiene cada
+ * formulario con una sola query.
+ */
+export async function contarPreguntasPorFormulario(
+  ids: string[],
+): Promise<Record<string, number>> {
+  if (ids.length === 0) return {};
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("preguntas")
+    .select("formulario_id")
+    .in("formulario_id", ids);
+
+  if (error) {
+    throw new FormulariosServiceError("contarPreguntasPorFormulario", error);
+  }
+
+  const counts: Record<string, number> = {};
+  for (const row of data ?? []) {
+    const fid = (row as { formulario_id: string }).formulario_id;
+    counts[fid] = (counts[fid] ?? 0) + 1;
+  }
+  return counts;
 }
+
+// Re-exports para tipos compartidos.
+export type {
+  Formulario,
+  FormularioConPreguntas,
+  Pregunta,
+  TipoPregunta,
+};

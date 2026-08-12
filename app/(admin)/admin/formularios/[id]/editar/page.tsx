@@ -34,6 +34,10 @@ export default async function EditarFormularioPage({
     notFound();
   }
 
+  if (!formulario) {
+    notFound();
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

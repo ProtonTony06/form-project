@@ -3,7 +3,10 @@ import { Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FormularioList } from "@/components/admin/FormularioList";
-import type { Formulario } from "@/types/formulario";
+import {
+  listarFormularios,
+  contarPreguntasPorFormulario,
+} from "@/lib/services/formulariosService";
 
 export const metadata = {
   title: "Tus formularios · FormProject",
@@ -12,38 +15,19 @@ export const metadata = {
 /**
  * Dashboard del admin.
  *
- * Por ahora muestra datos MOCKEADOS (la conexión real a Supabase llega en
- * la migración descrita en `lib/auth.ts`). La forma de los datos es la misma
- * que `Formulario` para que el día de mañana solo cambie el origen.
+ * Lee formularios y conteo de preguntas directamente de Supabase a través
+ * del service. Si la BD no responde, el error se propaga al error boundary
+ * del segmento `(admin)`.
  */
-const MOCK_FORMULARIOS: Formulario[] = [
-  {
-    id: "mock-1",
-    slug: "feedback-producto-q3",
-    titulo: "Feedback del producto — Q3",
-    descripcion:
-      "Encuesta corta para recoger opinión de los usuarios sobre las últimas novedades del producto.",
-    activo: true,
-    created_at: "2026-07-12T10:30:00.000Z",
-    updated_at: "2026-08-01T08:15:00.000Z",
-  },
-  {
-    id: "mock-2",
-    slug: "registro-evento-tech",
-    titulo: "Registro al evento Tech Meetup",
-    descripcion:
-      "Formulario de inscripción para el próximo meetup. Recoge nombre, email y tema de interés.",
-    activo: false,
-    created_at: "2026-06-20T14:00:00.000Z",
-    updated_at: "2026-07-05T09:00:00.000Z",
-  },
-];
-
 export default async function AdminDashboardPage() {
   const session = await auth();
   if (!session) {
     redirect("/admin/login");
   }
+
+  const formularios = await listarFormularios();
+  const ids = formularios.map((f) => f.id);
+  const preguntasCount = await contarPreguntasPorFormulario(ids);
 
   return (
     <div className="flex flex-col gap-8">
@@ -65,7 +49,10 @@ export default async function AdminDashboardPage() {
         </Link>
       </div>
 
-      <FormularioList formularios={MOCK_FORMULARIOS} />
+      <FormularioList
+        formularios={formularios}
+        preguntasCount={preguntasCount}
+      />
     </div>
   );
 }

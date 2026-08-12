@@ -1,24 +1,15 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { PublicForm } from "@/components/public/PublicForm";
-import { FORMULARIOS_MOCK } from "@/lib/mock/formularios";
-import type { FormularioConPreguntas } from "@/types/formulario";
+import { obtenerFormularioPublicoPorSlug } from "@/lib/services/formulariosService";
 
 /**
  * Página pública de un formulario.
  *
- * Por ahora lee de un mock hardcoded. Cuando llegue Supabase (Fase 1+),
- * sustituir `getFormularioFromMock` por una llamada a `lib/services/formularios.ts`.
- *
- * Si el slug no existe o el formulario no está activo, devolvemos 404
- * sin filtrar información sobre qué slugs existen.
+ * Lee de Supabase vía `obtenerFormularioPublicoPorSlug`. Si el slug no existe
+ * o el formulario no está activo, devuelve 404 sin filtrar información sobre
+ * qué slugs existen.
  */
-async function getFormularioFromMock(
-  slug: string,
-): Promise<FormularioConPreguntas | null> {
-  return FORMULARIOS_MOCK[slug] ?? null;
-}
-
 interface PageProps {
   params: { slug: string };
 }
@@ -26,9 +17,9 @@ interface PageProps {
 export async function generateMetadata({
   params,
 }: PageProps): Promise<Metadata> {
-  const formulario = await getFormularioFromMock(params.slug);
+  const formulario = await obtenerFormularioPublicoPorSlug(params.slug);
 
-  if (!formulario || !formulario.activo) {
+  if (!formulario) {
     return { title: "Formulario no encontrado | FormProject" };
   }
 
@@ -39,13 +30,13 @@ export async function generateMetadata({
 }
 
 export default async function FormularioPublicoPage({ params }: PageProps) {
-  const formulario = await getFormularioFromMock(params.slug);
+  const formulario = await obtenerFormularioPublicoPorSlug(params.slug);
 
-  if (!formulario || !formulario.activo) {
+  if (!formulario) {
     notFound();
   }
 
-  // Orden defensivo por si los mocks vienen desordenados.
+  // Orden defensivo por si la BD devuelve datos desordenados.
   const preguntasOrdenadas = [...formulario.preguntas].sort(
     (a, b) => a.orden - b.orden,
   );

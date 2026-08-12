@@ -342,6 +342,31 @@
 - **Issue:** RLS bloquea queries. Verificar que las políticas permiten acceso al `service_role`.
 - **Issue:** El pooler IPv4 de Supabase puede ser lento en conexiones frecuentes. Usar `DATABASE_URL` (pooler) para migraciones y `NEXT_PUBLIC_SUPABASE_URL` para queries normales.
 
+> **Estado de la Fase 1 (2026-08-12):**
+>
+> Implementación completa y verificada end-to-end contra Supabase real:
+>
+> - [x] Esquema PostgreSQL aplicado en `azkzzcoqqnxgaxdasqky` (eu-central-1) — 3 tablas + ENUM + 4 índices + trigger `set_updated_at` + RLS con 2 policies de lectura pública.
+> - [x] `supabase/migrations/20260811120000_init.sql` — idempotente (usa `IF NOT EXISTS` / `DROP IF EXISTS`), tracking en tabla `_migrations`.
+> - [x] `scripts/migrate.ts` — funciona vía `pg` con `DATABASE_URL`, idempotente.
+> - [x] `scripts/seed.ts` — hashea con bcrypt cost 12 y hace UPSERT en `admin_user`.
+> - [x] `types/database.ts` — tipos manuales (alineados con el esquema). El script `npm run db:types` está disponible para regenerarlos cuando la CLI esté autenticada.
+> - [x] `lib/services/formulariosService.ts` — CRUD completo con `service_role` (listar, obtener, público, crear, actualizar, eliminar, toggle, contar).
+> - [x] `lib/services/authService.ts` — `verificarCredencialesAdmin` y `upsertAdminUser` con bcrypt.
+> - [x] `lib/auth.ts` — migración a Supabase con fallback hardcoded (HARDCODE_ADMIN_*) para dev.
+> - [x] `lib/slug.ts` — `slugify`, `validarSlug`, `generarSlugUnico` con `nanoid`.
+> - [x] `lib/validators/formulario.ts` — `preguntaSchema` (discriminated union), `formularioCreateSchema`, `formularioUpdateSchema`.
+> - [x] Dashboard admin lee formularios reales (`app/(admin)/admin/page.tsx`).
+> - [x] Form público lee formularios reales (`app/(public)/f/[slug]/page.tsx`).
+> - [x] `npm run build` exitoso (8 rutas generadas sin errores).
+> - [x] Login funciona contra `admin_user` con bcrypt (probado con curl).
+> - [x] RLS funciona: inactivos devuelven 404, activos devuelven 200.
+>
+> **Notas operativas:**
+> - El proyecto está en región **eu-central-1** (Frankfurt). El `DATABASE_URL` original apuntaba al host directo `db.*.supabase.co` que solo resuelve en IPv6; actualizado al pooler `aws-0-eu-central-1.pooler.supabase.com` para entornos IPv4-only.
+> - Las policies de RLS dejan paso libre a `service_role` automáticamente (Supabase lo permite por diseño), así que todo el CRUD del admin sigue funcionando sin policies adicionales.
+> - `bcryptjs` se usa en lugar de `bcrypt` nativo (compatible con Edge/Node, ya estaba en `package.json`).
+
 ---
 
 # Fase 2 — Panel admin: login + dashboard
