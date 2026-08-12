@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { Plus, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { FormularioList } from "@/components/admin/FormularioList";
@@ -7,6 +7,7 @@ import {
   listarFormularios,
   contarPreguntasPorFormulario,
 } from "@/lib/services/formulariosService";
+import { contarRespuestasBatch } from "@/lib/services/respuestasService";
 
 export const metadata = {
   title: "Tus formularios · FormProject",
@@ -15,9 +16,9 @@ export const metadata = {
 /**
  * Dashboard del admin.
  *
- * Lee formularios y conteo de preguntas directamente de Supabase a través
- * del service. Si la BD no responde, el error se propaga al error boundary
- * del segmento `(admin)`.
+ * Lee formularios, conteo de preguntas y conteo de respuestas directamente
+ * de Supabase a través de los services. Si la BD no responde, el error se
+ * propaga al error boundary del segmento `(admin)`.
  */
 export default async function AdminDashboardPage() {
   const session = await auth();
@@ -27,7 +28,18 @@ export default async function AdminDashboardPage() {
 
   const formularios = await listarFormularios();
   const ids = formularios.map((f) => f.id);
-  const preguntasCount = await contarPreguntasPorFormulario(ids);
+
+  // Cargamos los conteos en paralelo: preguntas (metadatos del form) y
+  // respuestas (datos pivot).
+  const [preguntasCount, respuestasCount] = await Promise.all([
+    contarPreguntasPorFormulario(ids),
+    contarRespuestasBatch(ids),
+  ]);
+
+  const totalRespuestas = Object.values(respuestasCount).reduce(
+    (acc, n) => acc + n,
+    0,
+  );
 
   return (
     <div className="flex flex-col gap-8">
@@ -37,8 +49,20 @@ export default async function AdminDashboardPage() {
             Tus formularios
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Crea, edita y comparte los formularios de tu proyecto.
+            Gestiona tus formularios y revisa las respuestas recibidas.
           </p>
+          {totalRespuestas > 0 && (
+            <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-slate-700">
+              <MessageSquare
+                className="h-3.5 w-3.5 text-slate-400"
+                aria-hidden="true"
+              />
+              <strong className="font-semibold">{totalRespuestas}</strong>{" "}
+              {totalRespuestas === 1
+                ? "respuesta recibida en total"
+                : "respuestas recibidas en total"}
+            </p>
+          )}
         </div>
         <Link
           href="/admin/formularios/nuevo"
@@ -52,6 +76,7 @@ export default async function AdminDashboardPage() {
       <FormularioList
         formularios={formularios}
         preguntasCount={preguntasCount}
+        respuestasCount={respuestasCount}
       />
     </div>
   );

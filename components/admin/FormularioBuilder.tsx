@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Save,
   RefreshCw,
+  Lock,
 } from "lucide-react";
 import {
   Button,
@@ -44,6 +45,33 @@ const MAX_TITULO = 200;
 const MAX_DESCRIPCION = 1000;
 const MAX_SLUG = 40;
 const MAX_PREGUNTAS = 50;
+const AUTOMATICAS_COUNT = 2;
+
+/**
+ * Preguntas automáticas que el service añade en la BD en orden 0 y 1.
+ * El builder las pre-carga para que el admin las visualice como
+ * read-only. Se identifican por `esAutomatica: true`.
+ *
+ * El orden de estas entradas define qué pregunta va primero (nombre) y
+ * cuál segunda (email). No cambiarlas sin actualizar el contrato del
+ * service `formulariosService.ts`.
+ */
+const PREGUNTAS_AUTOMATICAS: PreguntaDraft[] = [
+  {
+    tipo: "texto_libre",
+    contenido: "¿Cuál es tu nombre?",
+    opciones: null,
+    requerido: true,
+    esAutomatica: true,
+  },
+  {
+    tipo: "texto_libre",
+    contenido: "¿Cuál es tu correo electrónico?",
+    opciones: null,
+    requerido: true,
+    esAutomatica: true,
+  },
+];
 
 /**
  * Builder principal del formulario. Usado por las páginas:
@@ -54,6 +82,8 @@ const MAX_PREGUNTAS = 50;
  *  - Estado local de título, descripción, slug, preguntas.
  *  - Auto-generación de slug desde título (mientras el usuario no lo edite).
  *  - Añadir / eliminar / reordenar preguntas.
+ *  - Las 2 primeras preguntas son siempre automáticas (read-only) —
+ *    se pre-cargan al crear y se restauran desde BD al editar.
  *  - Validación cliente antes de submit.
  *  - Submit vía Server Actions (crear / actualizar).
  *  - Redirección a la pantalla de edición tras crear.
@@ -75,15 +105,23 @@ export default function FormularioBuilder({
   const [slug, setSlug] = React.useState(initialData?.slug ?? "");
   // Si llegamos en modo edit, el slug del backend ya existe → no se autogenera.
   const [slugManual, setSlugManual] = React.useState(Boolean(initialData));
-  const [preguntas, setPreguntas] = React.useState<PreguntaDraft[]>(
-    initialData?.preguntas.map((p) => ({
-      id: p.id,
-      tipo: p.tipo,
-      contenido: p.contenido,
-      opciones: p.opciones,
-      requerido: p.requerido,
-    })) ?? []
-  );
+
+  // Preguntas: en edit, preservamos el id y marcamos las 2 primeras como
+  // automáticas (porque el service las inyecta en BD). En create, precargamos
+  // las 2 automáticas vacías.
+  const [preguntas, setPreguntas] = React.useState<PreguntaDraft[]>(() => {
+    if (initialData?.preguntas && initialData.preguntas.length > 0) {
+      return initialData.preguntas.map((p, i) => ({
+        id: p.id,
+        tipo: p.tipo,
+        contenido: p.contenido,
+        opciones: p.opciones,
+        requerido: p.requerido,
+        esAutomatica: i < AUTOMATICAS_COUNT,
+      }));
+    }
+    return [...PREGUNTAS_AUTOMATICAS];
+  });
 
   // Estado de submit.
   const [estado, setEstado] = React.useState<SubmitState>("idle");
@@ -167,11 +205,17 @@ export default function FormularioBuilder({
   }
 
   function deletePregunta(i: number) {
+    // Bloqueo defensa en profundidad: la UI también deshabilita el botón,
+    // pero si llega aquí, no borramos.
+    if (preguntas[i]?.esAutomatica) return;
     setPreguntas((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   function moveUp(i: number) {
     if (i === 0) return;
+    // Bloqueo: no se puede intercambiar una automática (posición 0 o 1)
+    // con una del builder.
+    if (preguntas[i - 1]?.esAutomatica) return;
     setPreguntas((prev) => {
       const next = [...prev];
       [next[i - 1], next[i]] = [next[i], next[i - 1]];
@@ -181,6 +225,9 @@ export default function FormularioBuilder({
 
   function moveDown(i: number) {
     if (i === preguntas.length - 1) return;
+    // Bloqueo: no se puede intercambiar una del builder con una automática
+    // (posición 0 o 1).
+    if (preguntas[i + 1]?.esAutomatica) return;
     setPreguntas((prev) => {
       const next = [...prev];
       [next[i + 1], next[i]] = [next[i], next[i + 1]];
@@ -207,14 +254,16 @@ export default function FormularioBuilder({
         "Solo minúsculas, números y guiones. No puede empezar ni terminar en guión.";
     }
 
-    if (preguntas.length === 0) {
-      next.preguntas = "Añade al menos una pregunta.";
+    // Las preguntas del builder son las que están después de las automáticas.
+    const builderPreguntas = preguntas.filter((p) => !p.esAutomatica);
+    if (builderPreguntas.length === 0) {
+      next.preguntas = "Añade al menos una pregunta propia además de las automáticas.";
     } else {
-      const vacias = preguntas.filter((p) => !p.contenido.trim());
+      const vacias = builderPreguntas.filter((p) => !p.contenido.trim());
       if (vacias.length > 0) {
         next.preguntas = "Todas las preguntas deben tener texto.";
       } else {
-        const invalidMultiple = preguntas.find((p) => {
+        const invalidMultiple = builderPreguntas.find((p) => {
           if (p.tipo !== "opcion_multiple") return false;
           const opts = (p.opciones ?? []).map((o) => o.trim()).filter(Boolean);
           return opts.length < 2;
@@ -243,6 +292,18 @@ export default function FormularioBuilder({
 
     setEstado("submitting");
 
+    // Enviamos SOLO las preguntas del builder (las automáticas las añade
+    // el service). Mantenemos el orden relativo y descartamos el flag
+    // `esAutomatica` (la capa de servicio ya inyecta las automáticas).
+    const builderPreguntas = preguntas
+      .filter((p) => !p.esAutomatica)
+      .map((p) => ({
+        tipo: p.tipo,
+        contenido: p.contenido,
+        opciones: p.opciones,
+        requerido: p.requerido,
+      }));
+
     const formData = new FormData();
     formData.append("titulo", titulo.trim());
     formData.append(
@@ -253,7 +314,7 @@ export default function FormularioBuilder({
     if (initialData?.id) {
       formData.append("id", initialData.id);
     }
-    formData.append("preguntas", JSON.stringify(preguntas));
+    formData.append("preguntas", JSON.stringify(builderPreguntas));
 
     const result: ActionResult<{ id: string; slug?: string }> =
       mode === "create"
@@ -279,6 +340,8 @@ export default function FormularioBuilder({
   }
 
   const isSubmitting = estado === "submitting";
+  const totalPreguntas = preguntas.length;
+  const builderCount = preguntas.filter((p) => !p.esAutomatica).length;
 
   return (
     <form onSubmit={onSubmit} noValidate className="space-y-6">
@@ -366,12 +429,17 @@ export default function FormularioBuilder({
           <div>
             <CardTitle>Preguntas</CardTitle>
             <p className="mt-1 text-sm text-slate-500">
-              Define el orden y el tipo de cada pregunta. Usa las flechas para
-              reordenar.
+              Las 2 primeras preguntas son automáticas (nombre y email) y no
+              pueden eliminarse. Añade las tuyas a continuación.
             </p>
           </div>
           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-            {preguntas.length} / {MAX_PREGUNTAS}
+            {totalPreguntas} / {MAX_PREGUNTAS}
+            {builderCount > 0 && (
+              <span className="ml-1 text-slate-500">
+                ({builderCount} propia{builderCount === 1 ? "" : "s"})
+              </span>
+            )}
           </span>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -404,7 +472,7 @@ export default function FormularioBuilder({
             </p>
           )}
 
-          <div>
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={addPregunta}
@@ -418,6 +486,10 @@ export default function FormularioBuilder({
               <Plus className="h-4 w-4" aria-hidden="true" />
               Añadir pregunta
             </button>
+            <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              Las preguntas con candado son automáticas del sistema.
+            </span>
           </div>
         </CardContent>
       </Card>

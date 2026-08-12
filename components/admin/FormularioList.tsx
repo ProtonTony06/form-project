@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Inbox, Pencil, ExternalLink } from "lucide-react";
+import { Inbox, Pencil, ExternalLink, MessageSquare } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
@@ -24,9 +24,19 @@ interface FormularioListProps {
    * Si no se proporciona, simplemente no se muestra el chip.
    */
   preguntasCount?: Record<string, number>;
+  /**
+   * Mapa opcional con el nº de respuestas por formulario (pivot a dashboard
+   * de respuestas). Si no se proporciona, no se muestra el badge ni el
+   * botón "Ver respuestas".
+   */
+  respuestasCount?: Record<string, number>;
 }
 
-export function FormularioList({ formularios, preguntasCount }: FormularioListProps) {
+export function FormularioList({
+  formularios,
+  preguntasCount,
+  respuestasCount,
+}: FormularioListProps) {
   if (formularios.length === 0) {
     return <EmptyState />;
   }
@@ -38,6 +48,9 @@ export function FormularioList({ formularios, preguntasCount }: FormularioListPr
           key={f.id}
           formulario={f}
           preguntas={preguntasCount?.[f.id]}
+          respuestas={
+            respuestasCount ? respuestasCount[f.id] ?? 0 : undefined
+          }
         />
       ))}
     </div>
@@ -63,9 +76,14 @@ function EmptyState() {
 interface FormularioCardProps {
   formulario: Formulario;
   preguntas?: number;
+  respuestas?: number;
 }
 
-function FormularioCard({ formulario, preguntas }: FormularioCardProps) {
+function FormularioCard({
+  formulario,
+  preguntas,
+  respuestas,
+}: FormularioCardProps) {
   return (
     <Card className="flex flex-col">
       <CardHeader>
@@ -87,6 +105,20 @@ function FormularioCard({ formulario, preguntas }: FormularioCardProps) {
               {preguntas} {preguntas === 1 ? "pregunta" : "preguntas"}
             </span>
           )}
+          {typeof respuestas === "number" && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+                respuestas > 0
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-slate-100 text-slate-500",
+              )}
+              title={`${respuestas} respuesta${respuestas === 1 ? "" : "s"} recibida${respuestas === 1 ? "" : "s"}`}
+            >
+              <MessageSquare className="h-3 w-3" aria-hidden="true" />
+              {respuestas} {respuestas === 1 ? "respuesta" : "respuestas"}
+            </span>
+          )}
         </div>
       </CardHeader>
       <CardContent className="flex-1">
@@ -102,6 +134,14 @@ function FormularioCard({ formulario, preguntas }: FormularioCardProps) {
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
           Editar
+        </Link>
+        <Link
+          href={`/admin/formularios/${formulario.id}/respuestas`}
+          aria-label={`Ver respuestas de ${formulario.titulo}`}
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+          Ver respuestas
         </Link>
         <ToggleActivoButton
           id={formulario.id}

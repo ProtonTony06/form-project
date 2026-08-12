@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   ListChecks,
+  Lock,
   Trash2,
   Type,
   X,
@@ -17,6 +18,12 @@ interface PreguntaEditorProps {
   pregunta: PreguntaDraft;
   index: number;
   total: number;
+  /**
+   * `true` si en este editor las automáticas están bloqueadas (no se pueden
+   * borrar / reordenar / cambiar tipo). Lo decide el builder según el
+   * tamaño relativo de la pregunta: las 2 primeras son siempre automáticas
+   * y no se pueden mover con las del builder.
+   */
   onChange: (p: PreguntaDraft) => void;
   onDelete: () => void;
   onMoveUp: () => void;
@@ -37,6 +44,11 @@ const TIPO_LABEL: Record<PreguntaDraft["tipo"], string> = {
  *  - Reordenar (↑↓) y eliminar.
  *  - Marcar como requerida.
  *
+ * Si la pregunta es automática (`esAutomatica === true`):
+ *  - Tipo, requerido y contenido están bloqueados parcialmente.
+ *  - Botón eliminar deshabilitado.
+ *  - Badge "Automática" visible.
+ *
  * Lógica de validación de mínimos (≥2 opciones no vacías en múltiple) la
  * gestiona el builder padre; aquí sólo marca el estado visual.
  */
@@ -54,15 +66,21 @@ export function PreguntaEditor({
   const opcionesValidas = opciones.map((o) => o.trim()).filter(Boolean);
   const showOpcionesWarning =
     isMultiple && opcionesValidas.length < 2;
+  const esAutomatica = Boolean(pregunta.esAutomatica);
 
+  // Para automáticas: el contenido está protegido — no permitir vaciarlo.
   function updateField<K extends keyof PreguntaDraft>(
     key: K,
-    value: PreguntaDraft[K]
+    value: PreguntaDraft[K],
   ) {
+    if (esAutomatica && key === "contenido" && typeof value === "string") {
+      if (value.trim().length === 0) return; // ignore vaciado
+    }
     onChange({ ...pregunta, [key]: value });
   }
 
   function changeTipo(tipo: PreguntaDraft["tipo"]) {
+    if (esAutomatica) return; // tipo bloqueado para automáticas
     if (tipo === pregunta.tipo) return;
     // Al cambiar a "texto_libre", se eliminan opciones (no aplican).
     // Al pasar a "opcion_multiple", se inicializa con 2 huecos si no había.
@@ -108,19 +126,33 @@ export function PreguntaEditor({
   return (
     <article
       className={cn(
-        "rounded-lg border border-slate-200 bg-white p-4 shadow-sm",
-        "transition-colors hover:border-slate-300"
+        "rounded-lg border bg-white p-4 shadow-sm transition-colors",
+        esAutomatica
+          ? "border-blue-200 bg-blue-50/50 hover:border-blue-300"
+          : "border-slate-200 hover:border-slate-300",
       )}
-      aria-label={`Pregunta ${index + 1}`}
+      aria-label={`Pregunta ${index + 1}${esAutomatica ? " (automática)" : ""}`}
     >
       <header className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-white",
+              esAutomatica ? "bg-blue-600" : "bg-slate-900",
+            )}
+          >
             {index + 1}
           </span>
+          {esAutomatica && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+              <Lock className="h-3 w-3" aria-hidden="true" />
+              Automática
+            </span>
+          )}
           <TipoSelector
             value={pregunta.tipo}
             onChange={changeTipo}
+            disabled={esAutomatica}
           />
         </div>
 
@@ -140,8 +172,13 @@ export function PreguntaEditor({
             <ArrowDown className="h-4 w-4" aria-hidden="true" />
           </IconAction>
           <IconAction
-            label="Eliminar pregunta"
+            label={
+              esAutomatica
+                ? "Campo automático (no se puede eliminar)"
+                : "Eliminar pregunta"
+            }
             onClick={onDelete}
+            disabled={esAutomatica}
             tone="destructive"
           >
             <Trash2 className="h-4 w-4" aria-hidden="true" />
@@ -155,6 +192,11 @@ export function PreguntaEditor({
           className="mb-1.5 block text-sm font-medium text-slate-700"
         >
           Texto de la pregunta
+          {esAutomatica && (
+            <span className="ml-2 text-xs font-normal text-blue-700">
+              (recomendado no modificar)
+            </span>
+          )}
         </label>
         <input
           id={`pregunta-${index}-contenido`}
@@ -163,10 +205,13 @@ export function PreguntaEditor({
           onChange={(e) => updateField("contenido", e.target.value)}
           placeholder="¿Qué quieres preguntar?"
           maxLength={500}
+          readOnly={esAutomatica}
+          aria-readonly={esAutomatica || undefined}
           className={cn(
-            "flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm",
+            "flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm",
             "placeholder:text-slate-400",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 focus-visible:border-slate-900"
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 focus-visible:border-slate-900",
+            esAutomatica && "cursor-not-allowed bg-blue-50/60 text-slate-700",
           )}
         />
       </div>
@@ -236,12 +281,18 @@ export function PreguntaEditor({
       )}
 
       <footer className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700">
+        <label
+          className={cn(
+            "flex items-center gap-2 text-sm text-slate-700",
+            esAutomatica ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+          )}
+        >
           <input
             type="checkbox"
             checked={pregunta.requerido}
+            disabled={esAutomatica}
             onChange={(e) => updateField("requerido", e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1"
+            className="h-4 w-4 rounded border-slate-300 text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 disabled:cursor-not-allowed"
           />
           <span>Requerida</span>
         </label>
@@ -253,19 +304,25 @@ export function PreguntaEditor({
 interface TipoSelectorProps {
   value: PreguntaDraft["tipo"];
   onChange: (t: PreguntaDraft["tipo"]) => void;
+  disabled?: boolean;
 }
 
-function TipoSelector({ value, onChange }: TipoSelectorProps) {
+function TipoSelector({ value, onChange, disabled }: TipoSelectorProps) {
   return (
     <div
       role="radiogroup"
       aria-label="Tipo de pregunta"
-      className="inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5"
+      aria-disabled={disabled || undefined}
+      className={cn(
+        "inline-flex rounded-md border border-slate-200 bg-slate-50 p-0.5",
+        disabled && "opacity-60",
+      )}
     >
       <TipoButton
         active={value === "texto_libre"}
         onClick={() => onChange("texto_libre")}
         label="Texto libre"
+        disabled={disabled}
       >
         <Type className="h-3.5 w-3.5" aria-hidden="true" />
       </TipoButton>
@@ -273,6 +330,7 @@ function TipoSelector({ value, onChange }: TipoSelectorProps) {
         active={value === "opcion_multiple"}
         onClick={() => onChange("opcion_multiple")}
         label="Opción múltiple"
+        disabled={disabled}
       >
         <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
       </TipoButton>
@@ -284,11 +342,13 @@ function TipoButton({
   active,
   onClick,
   label,
+  disabled,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
+  disabled?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -297,11 +357,13 @@ function TipoButton({
       role="radio"
       aria-checked={active}
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors",
         active
           ? "bg-white text-slate-900 shadow-sm"
-          : "text-slate-600 hover:text-slate-900"
+          : "text-slate-600 hover:text-slate-900",
+        disabled && "cursor-not-allowed hover:text-slate-600",
       )}
     >
       {children}

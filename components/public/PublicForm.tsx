@@ -28,9 +28,11 @@ interface Props {
  *
  * - Estado: mapa respuestas por id de pregunta + estado de submit.
  * - Validación cliente con Zod antes de enviar.
- * - Submit MOCKEADO: en cuanto exista el endpoint POST /api/submit/{slug},
- *   sustituir el `simularSubmit` por un `fetch` real.
+ * - Submit REAL: POST a /api/submit/{slug} (Fase 5 — pivot).
  * - En éxito: redirige a /f/{slug}/gracias?form={titulo}.
+ *
+ * El endpoint valida otra vez servidor (defensa en profundidad), persiste
+ * la respuesta en BD y devuelve { ok: true } o { ok: false, error }.
  */
 export function PublicForm({ formulario, preguntas }: Props) {
   const router = useRouter();
@@ -95,10 +97,26 @@ export function PublicForm({ formulario, preguntas }: Props) {
       return;
     }
 
-    // 3) Submit real (mockeado por ahora).
+    // 3) Submit real → endpoint POST /api/submit/{slug}.
     try {
-      // TODO Fase 5: sustituir por fetch a /api/submit/{slug}.
-      await simularSubmit();
+      const res = await fetch(`/api/submit/${formulario.slug}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ respuestas }),
+      });
+
+      const data: unknown = await res.json().catch(() => ({}));
+
+      if (!res.ok || !isOkPayload(data)) {
+        // isErrorPayload es type guard que devuelve boolean, no el payload.
+        // Si pasa, accedemos a `data.error`. Sin esto el build falla TS.
+        const errorMsg =
+          (isErrorPayload(data) ? data.error : null) ??
+          `Error ${res.status}. Inténtalo de nuevo.`;
+        setEstado("error");
+        setErrorGlobal(errorMsg);
+        return;
+      }
 
       setEstado("success");
       // Pequeño delay para que el usuario vea el check antes de redirigir.
@@ -177,36 +195,33 @@ export function PublicForm({ formulario, preguntas }: Props) {
       <div className="pt-2">
         <SubmitButton estado={estado} />
         <p className="mt-3 text-center text-xs text-slate-400">
-          Tus respuestas se enviarán al creador del formulario.
+          Tus respuestas se guardarán y podrás verlas desde tu panel.
         </p>
       </div>
     </form>
   );
 }
 
-/**
- * Simula el POST al endpoint de submit.
- *
- * - 800ms de latencia.
- * - 90% éxito, 10% error aleatorio (para que se vea el estado de error
- *   en pruebas manuales sin necesidad de tocar el código).
- *
- * En Fase 5 se reemplaza por:
- *   const res = await fetch(`/api/submit/${slug}`, {
- *     method: "POST",
- *     headers: { "Content-Type": "application/json" },
- *     body: JSON.stringify({ respuestas }),
- *   });
- *   if (!res.ok) throw new Error("...");
- */
-function simularSubmit(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      if (Math.random() < 0.9) {
-        resolve();
-      } else {
-        reject(new Error("Error de red simulado. Inténtalo de nuevo."));
-      }
-    }, 800);
-  });
+/* ─── helpers de tipos defensivos para la respuesta del endpoint ─── */
+
+function isOkPayload(d: unknown): d is { ok: true } {
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    "ok" in d &&
+    (d as { ok: unknown }).ok === true
+  );
+}
+
+function isErrorPayload(
+  d: unknown,
+): d is { ok: false; error: string } {
+  return (
+    typeof d === "object" &&
+    d !== null &&
+    "ok" in d &&
+    (d as { ok: unknown }).ok === false &&
+    "error" in d &&
+    typeof (d as { error: unknown }).error === "string"
+  );
 }

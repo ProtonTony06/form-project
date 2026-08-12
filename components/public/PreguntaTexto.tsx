@@ -13,12 +13,18 @@ interface Props {
 }
 
 const MAX_LENGTH = 5000;
+const EMAIL_MAX_LENGTH = 254; // RFC 5321
 
 /**
  * Pregunta de texto libre.
  *
  * Renderiza un <textarea> (no <input>) para permitir respuestas largas.
  * El contador avisa al usuario cuando se acerca al límite.
+ *
+ * Si la pregunta contiene la palabra "correo" (pregunta automática de email
+ * añadida por el service), se aplica `inputMode="email"` y se limita a
+ * 254 caracteres (RFC 5321). La validación final del formato se hace en
+ * backend; aquí solo se mejora la UX móvil.
  */
 export function PreguntaTexto({
   pregunta,
@@ -31,7 +37,19 @@ export function PreguntaTexto({
   const errorId = `${inputId}-error`;
   const contadorId = `${inputId}-contador`;
   const current = value ?? "";
-  const cercaDelLimite = current.length > MAX_LENGTH * 0.9;
+  const esEmail = esPreguntaEmail(pregunta);
+  const maxLength = esEmail ? EMAIL_MAX_LENGTH : MAX_LENGTH;
+  const cercaDelLimite = current.length > maxLength * 0.9;
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    let value = e.target.value;
+    // En emails, limitamos a 254 chars (RFC 5321) — la validación final
+    // de formato la hace el backend.
+    if (esEmail && value.length > EMAIL_MAX_LENGTH) {
+      value = value.slice(0, EMAIL_MAX_LENGTH);
+    }
+    onChange(value);
+  }
 
   return (
     <div className="space-y-2">
@@ -53,13 +71,17 @@ export function PreguntaTexto({
         name={inputId}
         rows={4}
         value={current}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={handleChange}
         disabled={disabled}
         required={pregunta.requerido}
-        maxLength={MAX_LENGTH}
+        maxLength={maxLength}
+        inputMode={esEmail ? "email" : undefined}
+        autoComplete={esEmail ? "email" : undefined}
         aria-invalid={error ? "true" : undefined}
         aria-describedby={cn(error ? errorId : undefined, contadorId)}
-        placeholder="Escribe tu respuesta aquí…"
+        placeholder={
+          esEmail ? "tu@correo.com" : "Escribe tu respuesta aquí…"
+        }
         className={cn(
           "block w-full resize-y rounded-lg border bg-white px-3.5 py-2.5 text-sm leading-relaxed text-slate-900 shadow-sm transition placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-offset-1 sm:text-base",
           error
@@ -91,9 +113,24 @@ export function PreguntaTexto({
             cercaDelLimite ? "text-amber-600" : "text-slate-400",
           )}
         >
-          {current.length} / {MAX_LENGTH}
+          {current.length} / {maxLength}
         </span>
       </div>
     </div>
   );
+}
+
+/**
+ * Detecta si la pregunta es la automática de email (orden 1, contiene
+ * "correo" en el contenido). Robusto a mayúsculas y acentos.
+ *
+ * No usamos el flag `esAutomatica` del dominio porque este componente
+ * también se reutiliza para formularios legacy sin flag; la heurística
+ * basada en el contenido cubre ambos casos.
+ */
+function esPreguntaEmail(pregunta: Pregunta): boolean {
+  if (pregunta.tipo !== "texto_libre") return false;
+  const texto = pregunta.contenido.toLowerCase().normalize("NFD");
+  const sinAcentos = texto.replace(/[̀-ͯ]/g, "");
+  return sinAcentos.includes("correo");
 }
