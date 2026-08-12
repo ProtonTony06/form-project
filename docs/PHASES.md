@@ -673,17 +673,20 @@
 
 ---
 
-### Integración pendiente (no realizada en Fase 3)
+### Integración completada (2026-08-12)
 
-- `FormularioList` (componente existente) aún tiene `onClick={() => alert("Próximamente")}`
-  en los botones de Editar / Toggle / Eliminar / Ver. Para completar la
-  integración basta con:
-  1. Reemplazar el botón Editar por un `<Link href={`/admin/formularios/${id}/editar`}>`.
-  2. Reemplazar el botón Toggle por `<ToggleActivoButton id={id} activo={activo} titulo={titulo} />`.
-  3. Reemplazar el botón Eliminar por `<DeleteFormularioButton id={id} titulo={titulo} />`.
-  4. (Opcional) Añadir `<CopyLinkButton slug={slug} />` junto al badge.
-  Esa edición se hará en una fase siguiente para no chocar con la migración
-  a Supabase del agente de Fase 1 (que va a tocar `app/(admin)/admin/page.tsx`).
+- `FormularioList` ya no tiene placeholders `alert("Próximamente")`. Cada
+  botón usa el componente real:
+  1. **Editar** → `<Link href={`/admin/formularios/${id}/editar`}>` con clases
+     `buttonVariants({ variant: "outline", size: "sm" })` + icono `Pencil`.
+  2. **Activar/Desactivar** → `<ToggleActivoButton id={id} activo={activo} titulo={titulo} />`
+     (switch con optimistic update + rollback).
+  3. **Ver** → `<Link href={`/f/${slug}`} target="_blank" rel="noopener noreferrer">`
+     con `variant: "ghost"` + icono `ExternalLink`.
+  4. **Eliminar** → `<DeleteFormularioButton id={id} titulo={titulo} />` (con
+     `window.confirm` + `eliminarFormularioAction` + redirect).
+  La copia de link al clipboard queda pendiente como `CopyLinkButton` para
+  Fase 7 (acción 3.11), fuera del scope de esta integración.
 
 ---
 

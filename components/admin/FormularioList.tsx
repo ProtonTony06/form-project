@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Inbox, Pencil, Power, Trash2, ExternalLink } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Inbox, Pencil, ExternalLink } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,15 +14,17 @@ import {
 } from "@/components/ui/card";
 import { cn, formatDate } from "@/lib/utils";
 import type { Formulario } from "@/types/formulario";
+import { DeleteFormularioButton } from "@/components/admin/DeleteFormularioButton";
+import { ToggleActivoButton } from "@/components/admin/ToggleActivoButton";
 
 interface FormularioListProps {
   formularios: Formulario[];
-  // TODO(Fase 3): recibir también nº de preguntas por formulario cuando
-  // llegue la query a Supabase con JOIN.
+  /**
+   * Mapa opcional con el nº de preguntas por formulario.
+   * Si no se proporciona, simplemente no se muestra el chip.
+   */
   preguntasCount?: Record<string, number>;
 }
-
-const PROXIMAMENTE = () => alert("Próximamente: esta acción se habilitará en Fase 3.");
 
 export function FormularioList({ formularios, preguntasCount }: FormularioListProps) {
   if (formularios.length === 0) {
@@ -92,52 +95,37 @@ function FormularioCard({ formulario, preguntas }: FormularioCardProps) {
         </p>
       </CardContent>
       <CardFooter className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={PROXIMAMENTE}
+        <Link
+          href={`/admin/formularios/${formulario.id}/editar`}
           aria-label={`Editar ${formulario.titulo}`}
+          className={buttonVariants({ variant: "outline", size: "sm" })}
         >
           <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
           Editar
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={PROXIMAMENTE}
-          aria-label={`${formulario.activo ? "Desactivar" : "Activar"} ${formulario.titulo}`}
-        >
-          <Power className="h-3.5 w-3.5" aria-hidden="true" />
-          {formulario.activo ? "Desactivar" : "Activar"}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={PROXIMAMENTE}
+        </Link>
+        <ToggleActivoButton
+          id={formulario.id}
+          activo={formulario.activo}
+          titulo={formulario.titulo}
+        />
+        <Link
+          href={`/f/${formulario.slug}`}
+          target="_blank"
+          rel="noopener noreferrer"
           aria-label={`Ver formulario público ${formulario.titulo}`}
           title="Abrir formulario público"
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
         >
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
           Ver
-        </Button>
+        </Link>
         <div className="ml-auto">
-          <Button
-            variant="ghost"
+          <DeleteFormularioButton
+            id={formulario.id}
+            titulo={formulario.titulo}
+            label="Eliminar"
             size="sm"
-            onClick={() => {
-              if (
-                typeof window !== "undefined" &&
-                window.confirm(`¿Eliminar el formulario "${formulario.titulo}"?`)
-              ) {
-                PROXIMAMENTE();
-              }
-            }}
-            aria-label={`Eliminar ${formulario.titulo}`}
-            className="text-red-600 hover:bg-red-50 hover:text-red-700"
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-            Eliminar
-          </Button>
+          />
         </div>
       </CardFooter>
     </Card>
