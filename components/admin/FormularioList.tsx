@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Inbox, Pencil, ExternalLink, MessageSquare } from "lucide-react";
+import { Inbox, Pencil, ExternalLink, MessageSquare, Eye } from "lucide-react";
 import { buttonVariants } from "@/lib/button-styles";
 import {
   Card,
@@ -127,6 +127,14 @@ function FormularioCard({
         </p>
       </CardContent>
       <CardFooter className="flex flex-wrap items-center gap-2">
+        <Link
+          href={`/admin/formularios/${formulario.id}`}
+          aria-label={`Ver detalle de ${formulario.titulo}`}
+          className={buttonVariants({ variant: "ghost", size: "sm" })}
+        >
+          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          Detalle
+        </Link>
         <Link
           href={`/admin/formularios/${formulario.id}/editar`}
           aria-label={`Editar ${formulario.titulo}`}
