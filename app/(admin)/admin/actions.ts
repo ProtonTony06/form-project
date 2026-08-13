@@ -82,6 +82,7 @@ export async function crearFormularioAction(
   try {
     const form = await crearFormularioSvc(parsed.data);
     revalidatePath("/admin");
+    revalidatePath(`/f/${form.slug}`);
     return { ok: true, data: { id: form.id, slug: form.slug } };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error creando formulario";
@@ -137,6 +138,7 @@ export async function actualizarFormularioAction(
     const result = await actualizarFormularioSvc(parsed.data);
     revalidatePath("/admin");
     revalidatePath(`/admin/formularios/${parsed.data.id}/editar`);
+    revalidatePath(`/f/${parsed.data.slug}`);
     return { ok: true, data: { id: result.id } };
   } catch (e) {
     const message =
@@ -164,6 +166,7 @@ export async function eliminarFormularioAction(
   try {
     await eliminarFormularioSvc(id);
     revalidatePath("/admin");
+    revalidatePath("/f/[slug]", "page");
     return { ok: true, data: null };
   } catch (e) {
     const message =
@@ -192,6 +195,9 @@ export async function toggleActivoAction(
   try {
     await toggleActivoSvc(id, activo);
     revalidatePath("/admin");
+    // Re-validar TODAS las páginas /f/[slug] (el slug puede cambiar tras
+    // renombrado). Más conservador pero barato en este proyecto.
+    revalidatePath("/f/[slug]", "page");
     return { ok: true, data: { id, activo } };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error cambiando estado";
