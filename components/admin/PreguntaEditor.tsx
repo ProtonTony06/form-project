@@ -208,7 +208,7 @@ export function PreguntaEditor({
           readOnly={esAutomatica}
           aria-readonly={esAutomatica || undefined}
           className={cn(
-            "flex h-10 w-full rounded-md border bg-white px-3 py-2 text-sm",
+            "flex h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
             "placeholder:text-slate-400",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 focus-visible:border-slate-900",
             esAutomatica && "cursor-not-allowed bg-blue-50/60 text-slate-700",
@@ -233,7 +233,7 @@ export function PreguntaEditor({
                 maxLength={200}
                 aria-label={`Opción ${i + 1}`}
                 className={cn(
-                  "flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm",
+                  "flex h-9 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
                   "placeholder:text-slate-400",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-1 focus-visible:border-slate-900"
                 )}
