@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ArrowLeft, Download, MessageSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { buttonVariants } from "@/lib/button-styles";
@@ -96,6 +96,17 @@ export default async function RespuestasFormularioPage({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={`/api/admin/formularios/${formulario.id}/respuestas.json`}
+            download={`respuestas-${formulario.slug}.json`}
+            className="group inline-flex h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50/60 px-5 text-sm font-medium text-emerald-700 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-emerald-100 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2"
+          >
+            <Download
+              className="h-4 w-4 transition-transform duration-150 group-hover:translate-y-0.5"
+              aria-hidden="true"
+            />
+            Descargar JSON
+          </a>
           <Link
             href={`/admin/formularios/${formulario.id}/editar`}
             className={buttonVariants({ variant: "outline", size: "md" })}
